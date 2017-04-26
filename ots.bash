@@ -18,7 +18,7 @@ fi
 # Defaults
 _OTS_URI="https://onetimesecret.com"
 _OTS_API="$_OTS_URI/api/v1"
-_OTS_CURL="curl -s"
+_OTS_FMT="printf"  # "printf", "yaml", "json" or anything else == raw
 
 # --------------------
 # Support only functions.
@@ -34,6 +34,18 @@ _ots_join() { local d="$1"; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}";
 _ots_auth() {
   test -n "$_OTS_USER" -a -n "$_OTS_KEY" \
     && echo "-u $_OTS_USER:$_OTS_KEY"
+}
+
+# output results, as formatted, json, yaml or raw.
+_ots_output() {
+  case "${_OTS_FMT,,}" in
+    json)   jq "." - ;;
+    yaml)   jq -r "to_entries|map(\"\(.key): \(.value)\")|.[]" - ;;
+    # printf assumes $1 = printf format; remaining argumets are sent to jq
+    printf) printf "${1}" "$(jq "${@:2}" -)" ;;
+    # anything else is 'raw'
+    raw|*)  cat - ;;
+  esac
 }
 
 # parse JSON and put into '_ots_result' associative array
@@ -63,9 +75,8 @@ ots_key()  { _OTS_KEY="$1"; }
 # and further are assumed to be supported by the 'share' API form.
 ots_share() {
   local ARGS; ARGS=$(_ots_join " -F " "" "$@")
-  local JSON;
-  JSON=$(curl -s $(_ots_auth) $ARGS -F secret='<-' $_OTS_API/share)
-  printf "$_OTS_URI/secret/%s\n" $(echo "$JSON" | jq -r '.secret_key')
+  curl -s $(_ots_auth) $ARGS -F secret='<-' "$_OTS_API/share" \
+    | _ots_output "$_OTS_URI/secret/%s\n" -r '.secret_key'
 }
 
 # Generate a random secret.
@@ -78,8 +89,8 @@ ots_share() {
 # Retrieve the secret data; Secret key given on the command line.
 ots_get() { ots_retrieve "$@"; }
 ots_retrieve() {
-  curl -s -d '' $_OTS_API/secret/$1 \
-    | jq -r '.value // .message // "Unknown Error"'
+ curl -s -d '' $_OTS_API/secret/$1 \
+   | _ots_output '%s\n' -r '.value // .message // "Unknown Error"'
 }
 
 # retrieve the metadata for a secret
@@ -129,15 +140,17 @@ while [[ $# -ge 1 ]]; do
     -p	|--passphrase)	 ARGS+=("passphrase=$2")	; shift 2 ;;
     -t=*|--ttl=*)	 ARGS+=("ttl=${1#*=}")		; shift	  ;;
     -t	|--ttl)		 ARGS+=("ttl=$2")		; shift 2 ;;
+    *=*)		 ARGS+=("$1")			; shift ;;
     # 
     -h	|--host)	 ots_host "$2"			; shift 2 ;; 
     -u	|--user)	 ots_user "$2"			; shift 2 ;;
     -k	|--key)		 ots_key "$2"			; shift 2 ;;
     #
-    #-f	 |--format)	 FORMAT="$2"			; shift 2 ;;
+    -f  |--format)	 _OTS_FMT="$2"  		; shift 2 ;;
+    yaml|json)		 _OTS_FMT="$1"  		; shift   ;;
     #
-    #-s=*|--secret=*)	 SECRET="${1#*=}"		; shift	  ;;
-    #-s	|--secret)	 SECRET="$2"			; shift 2 ;;
+    -s=*|--secret=*)	 SECRET="${1#*=}"		; shift	  ;;
+    -s	|--secret)	 SECRET="$2"			; shift 2 ;;
     #
     # anything else is assumed to be an argument to the function about to be called
     *)			 ARGS+=("$1")			; shift ;;
