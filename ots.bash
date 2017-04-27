@@ -24,7 +24,7 @@ _OTS_API="$_OTS_URI/api/v1"
 _OTS_FMT="printf"  # "printf", "yaml", "json" or anything else == raw
 
 # --------------------
-# Support only functions.
+# Internal only functions
 
 # join all but the first arg together, separated by the first arg
 # e.g. $(join : foo bar baz) returns "foo:bar:baz"
@@ -35,8 +35,8 @@ _ots_join() { local d="$1"; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}";
 
 # Generate the auth arguments
 _ots_auth() {
-  test -n "$_OTS_USER" -a -n "$_OTS_KEY" \
-    && echo "-u $_OTS_USER:$_OTS_KEY"
+  test -n "$_OTS_UID" -a -n "$_OTS_KEY" \
+    && echo "-u $_OTS_UID:$_OTS_KEY"
 }
 
 # output results, as formatted, json, yaml or raw.
@@ -69,17 +69,20 @@ _ots_output() {
 #  done
 #}
 
-# Set/save authenticated user (email) / key / host
-ots_host() { _OTS_URI="$1"; }
-ots_user() { _OTS_USER="$1"; }
-ots_key()  { _OTS_KEY="$1"; }
-
 # --------------------
-# Functions calls corresponding to API calls
+# Exepcted entry-point functions - API and others
+
+# Set/save authenticated user (email) / key / host
+ots_host()   { _OTS_URI="$1"; }
+ots_user()   { _OTS_UID="$1"; }
+ots_key()    { _OTS_KEY="$1"; }
+ots_format() { _OTS_FMT="$1"; }
 
 # check on status of OTS server
-#ots_status {
-#}
+ots_status() {
+  curl -s $(_ots_auth) "$_OTS_API/status" \
+    | _ots_output '%s\n' -r '.status // .message // "Unknown Error"'
+}
 
 # Share a secret, which is assumed to come in on STDIN.
 # All arguments are assumed to be correct of the form
@@ -129,11 +132,15 @@ ots_recent() {
 }
 
 # burn a secret, given the metadata key
-#ots_burn {
+#ots_burn() {
 #}
+
 # check on state of a secret, given the metadata key
-#ots_state {
-#}
+ots_state() {
+  curl -s -d '' $_OTS_API/private/$1 \
+    | _ots_output '%s\n' -r '.state // .message // "unknown"'
+}
+
 # Get the secret url for a secret, given the metadata key
 #ots_url() {
 #}
@@ -150,6 +157,7 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]] ; then
       -h  |--host) 	 ots_host "$2"			; shift 2 ;;
       -u  |--user)	 ots_user "$2"			; shift 2 ;;
       -k  |--key) 	 ots_key "$2"			; shift 2 ;;
+      -f  |--format) 	 ots_format "$2"		; shift 2 ;;
       *)		 echo "unknown option '$1'"	; shift   ;;
     esac
   done
@@ -168,7 +176,7 @@ while [[ $# -ge 1 ]]; do
     -D|--debug)		 _OTS_DEBUG=echo		; shift	  ;;
     -H|--help)		 echo "need help"		; exit	  ;;
     #
-    share|generate|get|retrieve|metadata|recent|url)
+    status|share|generate|get|retrieve|metadata|recent|state|url)
       ACTION="$1"					; shift	  ;;
     #
     -r=*|--recipient=*)	 ARGS+=("recipient=${1#*=}")	; shift	  ;;
@@ -183,8 +191,8 @@ while [[ $# -ge 1 ]]; do
     -u	|--user)	 ots_user "$2"			; shift 2 ;;
     -k	|--key)		 ots_key "$2"			; shift 2 ;;
     #
-    -f  |--format)	 _OTS_FMT="$2"  		; shift 2 ;;
-    yaml|json|raw)	 _OTS_FMT="$1"  		; shift   ;;
+    -f  |--format)	 ots_format "$2"  		; shift 2 ;;
+    yaml|json|raw)	 ots_format "$1"  		; shift   ;;
     #
     -s=*|--secret=*)	 SECRET="${1#*=}"		; shift	  ;;
     -s	|--secret)	 SECRET="$2"			; shift 2 ;;
