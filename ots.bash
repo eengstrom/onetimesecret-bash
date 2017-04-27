@@ -76,10 +76,10 @@ _ots_output() {
 # Exepcted entry-point functions - API and others
 
 # Set/save authenticated user (email) / key / host
-ots_host()   { _OTS_URI="$1"; }
-ots_user()   { _OTS_UID="$1"; }
-ots_key()    { _OTS_KEY="$1"; }
-ots_format() { _OTS_FMT="$1"; }
+ots_set_host()   { _OTS_URI="$1"; }
+ots_set_user()   { _OTS_UID="$1"; }
+ots_set_key()    { _OTS_KEY="$1"; }
+ots_set_format() { _OTS_FMT="$1"; }
 
 # check on status of OTS server
 ots_status() {
@@ -170,10 +170,10 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]] ; then
   # parse some arguments for configuration
   while [[ $# -ge 1 ]]; do
     case "$1" in
-      -h  |--host)       ots_host "$2"                  ; shift 2 ;;
-      -u  |--user)       ots_user "$2"                  ; shift 2 ;;
-      -k  |--key)        ots_key "$2"                   ; shift 2 ;;
-      -f  |--format)     ots_format "$2"                ; shift 2 ;;
+      -h  |--host)       ots_set_host "$2"              ; shift 2 ;;
+      -u  |--user)       ots_set_user "$2"              ; shift 2 ;;
+      -k  |--key)        ots_set_key "$2"               ; shift 2 ;;
+      -f  |--format)     ots_set_format "$2"            ; shift 2 ;;
       *)                 echo "unknown option '$1'"     ; shift   ;;
     esac
   done
@@ -193,12 +193,12 @@ while [[ $# -ge 1 ]]; do
     -D|--debug)          _OTS_DEBUG=echo                ; shift   ;;
     -H|--help)           echo "need help"               ; exit    ;;
     # Connection parameter
-    -h  |--host)         ots_host "$2"                  ; shift 2 ;;
-    -u  |--user)         ots_user "$2"                  ; shift 2 ;;
-    -k  |--key)          ots_key "$2"                   ; shift 2 ;;
+    -h  |--host)         ots_set_host "$2"              ; shift 2 ;;
+    -u  |--user)         ots_set_user "$2"              ; shift 2 ;;
+    -k  |--key)          ots_set_key "$2"               ; shift 2 ;;
     # Otuput format
-    -f  |--format)       ots_format "$2"                ; shift 2 ;;
-    yaml|json|raw)       ots_format "$1"                ; shift   ;;
+    -f  |--format)       ots_set_format "$2"            ; shift 2 ;;
+    yaml|json|raw)       ots_set_format "$1"            ; shift   ;;
     # Action
     status|share|generate|get|retrieve|metadata|recent|state|url|metaurl)
                          ACTION="$1"                    ; shift   ;;
