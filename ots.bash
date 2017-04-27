@@ -20,7 +20,6 @@ fi
 
 # Defaults
 _OTS_URI="https://onetimesecret.com"
-_OTS_API="$_OTS_URI/api/v1"
 _OTS_FMT="printf"  # "printf", "yaml", "json" or anything else == raw
 
 # --------------------
@@ -32,6 +31,9 @@ _OTS_FMT="printf"  # "printf", "yaml", "json" or anything else == raw
 # another idea with multi-char separators:
 # http://stackoverflow.com/questions/1527049/join-elements-of-an-array
 _ots_join() { local d="$1"; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}"; }
+
+# Generate API URI
+_ots_api() { echo "${_OTS_URI}/api/v1"; }
 
 # Generate the auth arguments
 _ots_auth() {
@@ -80,7 +82,7 @@ ots_format() { _OTS_FMT="$1"; }
 
 # check on status of OTS server
 ots_status() {
-  curl -s $(_ots_auth) "$_OTS_API/status" \
+  curl -s $(_ots_auth) "$(_ots_api)/status" \
     | _ots_output '%s\n' -r '.status // .message // "Unknown Error"'
 }
 
@@ -90,7 +92,7 @@ ots_status() {
 # and further are assumed to be supported by the 'share' API form.
 ots_share() {
   local ARGS; ARGS=$(_ots_join " -F " "" "$@")
-  curl -s $(_ots_auth) $ARGS -F secret='<-' "$_OTS_API/share" \
+  curl -s $(_ots_auth) $ARGS -F secret='<-' "$(_ots_api)/share" \
     | _ots_output "$_OTS_URI/secret/%s\n" -r '.secret_key'
 }
 
@@ -100,20 +102,20 @@ ots_share() {
 # and further are assumed to be supported by the 'generate' API form.
 ots_generate() {
   local ARGS; ARGS=$(_ots_join " -F " "" "$@")
-  curl -s $(_ots_auth) ${ARGS:--d "''"} "$_OTS_API/generate" \
+  curl -s $(_ots_auth) ${ARGS:--d "''"} "$(_ots_api)/generate" \
     | _ots_output "$_OTS_URI/secret/%s\n" -r '.secret_key'
 }
 
 # Retrieve the secret data; Secret key given on the command line.
 ots_get() { ots_retrieve "$@"; }
 ots_retrieve() {
-  curl -s -d '' $_OTS_API/secret/$1 \
+  curl -s -d '' $(_ots_api)/secret/$1 \
     | _ots_output '%s\n' -r '.value // .message // "Unknown Error"'
 }
 
 # retrieve the metadata for a secret
 ots_metadata() {
-  curl -s -d '' $_OTS_API/private/$1 \
+  curl -s -d '' $(_ots_api)/private/$1 \
     | _ots_output '%s\n' '.'
 }
 
@@ -126,7 +128,7 @@ ots_recent() {
 
   echo "this is not working against the standard server - issue submitted"
 
-  echo curl -s $(_ots_auth) -d '' $_OTS_API/metadata/recent \
+  echo curl -s $(_ots_auth) -d '' $(_ots_api)/metadata/recent \
     | cat -
 #   | _ots_output '%s\n' -r '.value // .message // "Unknown Error"'
 }
@@ -137,7 +139,7 @@ ots_recent() {
 
 # check on state of a secret, given the metadata key
 ots_state() {
-  curl -s -d '' $_OTS_API/private/$1 \
+  curl -s -d '' $(_ots_api)/private/$1 \
     | _ots_output '%s\n' -r '.state // .message // "unknown"'
 }
 
