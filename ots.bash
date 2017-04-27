@@ -22,6 +22,7 @@ fi
 _OTS_URI="https://onetimesecret.com"
 _OTS_URN="api/v1"
 _OTS_FMT="printf"  # "printf", "yaml", "json" or anything else == raw
+_OTS_OUT="url"     # "url", "metadata[_key]" - what is output from share|generate
 
 # ------------------------------------------------------------
 # Internal only functions
@@ -35,6 +36,7 @@ _ots_join() { local d="$1"; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}";
 
 # Generate API URI
 _ots_api() { echo "${_OTS_URI}/${_OTS_URN}"; }
+_ots_metaapi() { echo "$(_ots_api)/private/$1"; }
 
 # Generate the auth arguments
 _ots_auth() {
@@ -118,7 +120,7 @@ ots_retrieve() {
 
 # retrieve the metadata for a secret
 ots_metadata() {
-  curl -s -d '' $(ots_metaurl "$1") \
+  curl -s -d '' $(_ots_metaapi "$1") \
     | _ots_output '%s\n' '.'
 }
 
@@ -144,22 +146,24 @@ ots_recent() {
 
 # check on state of a secret, given the metadata key
 ots_state() {
-  curl -s -d '' $(ots_metaurl "$1") \
+  curl -s -d '' $(_ots_metaapi "$1") \
     | _ots_output '%s\n' '.state // .message // "unknown"'
+}
+
+# get the secret key for a secret, given the metadata key
+ots_key() { ots_secret_key "$@"; }
+ots_secret_key() {
+  curl -s -d '' $(_ots_metaapi "$1") \
+    | _ots_output "%s\n" '.secret_key'
 }
 
 # Get the (user-friendly) secret url for a secret, given the metadata key
 ots_url() { ots_secret_url "$@"; }
-ots_secret_url() {
-  curl -s -d '' $(ots_metaurl "$1") \
-    | _ots_output "$_OTS_URI/secret/%s\n" -r '.secret_key'
-}
+ots_secret_url() { printf "$_OTS_URI/secret/%s\n" $(ots_key "$@"); }
 
-# Get the (API) metadata url for a secret, given the metadata key
+# Get the (user-friendly) metadata url for a secret, given the metadata key
 ots_metaurl() { ots_metadata_url "$@"; }
-ots_metadata_url() {
-  echo "$(_ots_api)/private/$1"
-}
+ots_metadata_url() { printf "$_OTS_URI/private/%s\n" "$@"; }
 
 # ------------------------------------------------------------
 # Check if we are being sourced only for our functions
@@ -200,7 +204,7 @@ while [[ $# -ge 1 ]]; do
     -f  |--format)       ots_set_format "$2"            ; shift 2 ;;
     yaml|json|raw)       ots_set_format "$1"            ; shift   ;;
     # Action
-    status|share|generate|get|retrieve|metadata|recent|state|url|metaurl)
+    status|share|generate|get|retrieve|metadata|recent|state|key|url|metaurl)
                          ACTION="$1"                    ; shift   ;;
     # Secrets are collected in the ARGS
     -s=*|--secret=*)     ARGS+=("${1#*=}")              ; shift   ;;
