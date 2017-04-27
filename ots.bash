@@ -82,22 +82,41 @@ ots_share() {
 # Generate a random secret.
 # All arguments are assumed to be correct of the form
 #   PARAM=VALUE
-# and further are assumed to be supported by the 'share' API form.
-#ots_generate() {
-#}
+# and further are assumed to be supported by the 'generate' API form.
+ots_generate() {
+  local ARGS; ARGS=$(_ots_join " -F " "" "$@")
+  curl -s $(_ots_auth) ${ARGS:--d "''"} "$_OTS_API/generate" \
+    | _ots_output "$_OTS_URI/secret/%s\n" -r '.secret_key'
+}
 
 # Retrieve the secret data; Secret key given on the command line.
 ots_get() { ots_retrieve "$@"; }
 ots_retrieve() {
- curl -s -d '' $_OTS_API/secret/$1 \
-   | _ots_output '%s\n' -r '.value // .message // "Unknown Error"'
+  curl -s -d '' $_OTS_API/secret/$1 \
+    | _ots_output '%s\n' -r '.value // .message // "Unknown Error"'
 }
 
 # retrieve the metadata for a secret
-#ots_metadata() {
-#}
+ots_metadata() {
+  curl -s -d '' $_OTS_API/private/$1 \
+    | _ots_output '%s\n' '.'
+}
 
-# Get the secret url for a secret
+# retrieve recent metadata keys; requires auth tokens
+ots_recent() {
+  if [ -z "$(_ots_auth)" ]; then
+    echo Recent metadata requires authentication information.
+    return
+  fi
+
+  echo "this is not working against the standard server - issue submitted"
+
+  echo curl -s $(_ots_auth) -d '' $_OTS_API/metadata/recent \
+    | cat -
+#   | _ots_output '%s\n' -r '.value // .message // "Unknown Error"'
+}
+
+# Get the secret url for a secret given the metadata key
 #ots_url() {
 #}
 
@@ -110,7 +129,7 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]] ; then
   # parse some arguments for configuration
   while [[ $# -ge 1 ]]; do
     case "$1" in
-      -h  |--host) 	 ots_host "$2"			; shift 2 ;; 
+      -h  |--host) 	 ots_host "$2"			; shift 2 ;;
       -u  |--user)	 ots_user "$2"			; shift 2 ;;
       -k  |--key) 	 ots_key "$2"			; shift 2 ;;
       *)		 echo "unknown option '$1'"	; shift   ;;
@@ -131,8 +150,8 @@ while [[ $# -ge 1 ]]; do
     -D|--debug)		 _OTS_DEBUG=echo		; shift	  ;;
     -H|--help)		 echo "need help"		; exit	  ;;
     #
-    share|generate|get|retrieve|metadata|url) 
-      ACTION="$1"					; shift	  ;; 
+    share|generate|get|retrieve|metadata|recent|url)
+      ACTION="$1"					; shift	  ;;
     #
     -r=*|--recipient=*)	 ARGS+=("recipient=${1#*=}")	; shift	  ;;
     -r	|--recipient)	 ARGS+=("recipient=$2")		; shift 2 ;;
@@ -141,8 +160,8 @@ while [[ $# -ge 1 ]]; do
     -t=*|--ttl=*)	 ARGS+=("ttl=${1#*=}")		; shift	  ;;
     -t	|--ttl)		 ARGS+=("ttl=$2")		; shift 2 ;;
     *=*)		 ARGS+=("$1")			; shift ;;
-    # 
-    -h	|--host)	 ots_host "$2"			; shift 2 ;; 
+    #
+    -h	|--host)	 ots_host "$2"			; shift 2 ;;
     -u	|--user)	 ots_user "$2"			; shift 2 ;;
     -k	|--key)		 ots_key "$2"			; shift 2 ;;
     #
@@ -160,7 +179,7 @@ done
 # Default action is 'share'
 ACTION=${ACTION:-share}
 
-# Do the action.  
+# Do the action.
 ots_$ACTION "${ARGS[@]}"
 
 exit
