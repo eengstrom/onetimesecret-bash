@@ -92,7 +92,7 @@ ots_status() {
 #   PARAM=VALUE
 # and further are assumed to be supported by the 'share' API form.
 ots_share() {
-  local ARGS; ARGS=$(_ots_join " -F " "" "$@")
+  local ARGS; ARGS=$(_ots_join " -F " "" "${@}")
   curl -s $(_ots_auth) $ARGS -F secret='<-' "$(_ots_api)/share" \
     | _ots_output "$_OTS_URI/secret/%s\n" '.secret_key'
 }
@@ -102,7 +102,7 @@ ots_share() {
 #   PARAM=VALUE
 # and further are assumed to be supported by the 'generate' API form.
 ots_generate() {
-  local ARGS; ARGS=$(_ots_join " -F " "" "$@")
+  local ARGS; ARGS=$(_ots_join " -F " "" "${@}")
   curl -s $(_ots_auth) ${ARGS:--d "''"} "$(_ots_api)/generate" \
     | _ots_output "$_OTS_URI/secret/%s\n" '.secret_key'
 }
@@ -110,7 +110,9 @@ ots_generate() {
 # Retrieve the secret data; Secret key given on the command line.
 ots_get() { ots_retrieve "$@"; }
 ots_retrieve() {
-  curl -s -d '' $(_ots_api)/secret/$1 \
+  local KEY;  KEY="${@: -1}"
+  local ARGS; ARGS=$(_ots_join " -F " "" "${@:1:$(($#-1))}")
+  curl -s ${ARGS:--d "''"} $(_ots_api)/secret/$KEY \
     | _ots_output '%s\n' '.value // .message // "Unknown Error"'
 }
 
@@ -128,9 +130,10 @@ ots_recent() {
   fi
 
   echo "this is not working against the standard server - issue submitted"
+  echo curl -s $(_ots_auth) -d '' $(_ots_api)/metadata/recent
+  echo curl -s $(_ots_auth) -d '' $(_ots_api)/private/recent
 
-  echo curl -s $(_ots_auth) -d '' $(_ots_api)/metadata/recent \
-    | cat -
+#  curl -u "$USER:$KEY" -d '' $(_ots_api)/metadata/recent
 #   | _ots_output '%s\n' '.value // .message // "Unknown Error"'
 }
 
@@ -165,11 +168,11 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]] ; then
   # parse some arguments for configuration
   while [[ $# -ge 1 ]]; do
     case "$1" in
-      -h  |--host) 	 ots_host "$2"			; shift 2 ;;
-      -u  |--user)	 ots_user "$2"			; shift 2 ;;
-      -k  |--key) 	 ots_key "$2"			; shift 2 ;;
-      -f  |--format) 	 ots_format "$2"		; shift 2 ;;
-      *)		 echo "unknown option '$1'"	; shift   ;;
+      -h  |--host)       ots_host "$2"                  ; shift 2 ;;
+      -u  |--user)       ots_user "$2"                  ; shift 2 ;;
+      -k  |--key)        ots_key "$2"                   ; shift 2 ;;
+      -f  |--format)     ots_format "$2"                ; shift 2 ;;
+      *)                 echo "unknown option '$1'"     ; shift   ;;
     esac
   done
 
@@ -181,35 +184,36 @@ fi
 # Running standalone - parse args and do something useful
 
 # Collect form args in an array to pass to the function
+FORM=()
 ARGS=()
 while [[ $# -ge 1 ]]; do
   case "$1" in
-    -D|--debug)		 _OTS_DEBUG=echo		; shift	  ;;
-    -H|--help)		 echo "need help"		; exit	  ;;
-    #
+    -D|--debug)          _OTS_DEBUG=echo                ; shift   ;;
+    -H|--help)           echo "need help"               ; exit    ;;
+    # Connection parameter
+    -h  |--host)         ots_host "$2"                  ; shift 2 ;;
+    -u  |--user)         ots_user "$2"                  ; shift 2 ;;
+    -k  |--key)          ots_key "$2"                   ; shift 2 ;;
+    # Otuput format
+    -f  |--format)       ots_format "$2"                ; shift 2 ;;
+    yaml|json|raw)       ots_format "$1"                ; shift   ;;
+    # Action
     status|share|generate|get|retrieve|metadata|recent|state|url|metaurl)
-      ACTION="$1"					; shift	  ;;
-    #
-    -r=*|--recipient=*)	 ARGS+=("recipient=${1#*=}")	; shift	  ;;
-    -r	|--recipient)	 ARGS+=("recipient=$2")		; shift 2 ;;
-    -p=*|--passphrase=*) ARGS+=("passphrase=${1#*=}")	; shift	  ;;
-    -p	|--passphrase)	 ARGS+=("passphrase=$2")	; shift 2 ;;
-    -t=*|--ttl=*)	 ARGS+=("ttl=${1#*=}")		; shift	  ;;
-    -t	|--ttl)		 ARGS+=("ttl=$2")		; shift 2 ;;
-    *=*)		 ARGS+=("$1")			; shift ;;
-    #
-    -h	|--host)	 ots_host "$2"			; shift 2 ;;
-    -u	|--user)	 ots_user "$2"			; shift 2 ;;
-    -k	|--key)		 ots_key "$2"			; shift 2 ;;
-    #
-    -f  |--format)	 ots_format "$2"  		; shift 2 ;;
-    yaml|json|raw)	 ots_format "$1"  		; shift   ;;
-    #
-    -s=*|--secret=*)	 SECRET="${1#*=}"		; shift	  ;;
-    -s	|--secret)	 SECRET="$2"			; shift 2 ;;
-    #
+                         ACTION="$1"                    ; shift   ;;
+    # Secrets are collected in the ARGS
+    -s=*|--secret=*)     ARGS+=("${1#*=}")              ; shift   ;;
+    -s  |--secret)       ARGS+=("$2")                   ; shift 2 ;;
+    secret=*)            ARGS+=("${1#*=}")              ; shift   ;;
+    # Form ARGS, mostly for share, generate, get
+    -r=*|--recipient=*)  FORM+=("recipient=${1#*=}")    ; shift   ;;
+    -r  |--recipient)    FORM+=("recipient=$2")         ; shift 2 ;;
+    -p=*|--passphrase=*) FORM+=("passphrase=${1#*=}")   ; shift   ;;
+    -p  |--passphrase)   FORM+=("passphrase=$2")        ; shift 2 ;;
+    -t=*|--ttl=*)        FORM+=("ttl=${1#*=}")          ; shift   ;;
+    -t  |--ttl)          FORM+=("ttl=$2")               ; shift 2 ;;
+    *=*)                 FORM+=("$1")                   ; shift ;;
     # anything else is assumed to be an argument to the function about to be called
-    *)			 ARGS+=("$1")			; shift ;;
+    *)                   ARGS+=("$1")                   ; shift ;;
   esac
 done
 
@@ -217,7 +221,19 @@ done
 ACTION=${ACTION:-share}
 
 # Do the action.
-ots_$ACTION "${ARGS[@]}"
+if [[ "${ACTION}" == "share" ]]; then
+  if [ ${#ARGS[@]} -gt 0 ] ; then
+    # assume secret is the composition of the extra args provided
+    SECRET="${ARGS[@]}"
+  else
+    # read secret from stdin, with prompt if running interactively
+    test -t 0 && echo 'Enter secret; terminate with Ctrl-D:'
+    SECRET=$(cat -)
+  fi
+  echo "${SECRET}" | ots_share "${FORM[@]}"
+else
+  ots_$ACTION "${FORM[@]}" "${ARGS[@]}"
+fi
 
 exit
 
