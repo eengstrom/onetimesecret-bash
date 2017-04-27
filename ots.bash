@@ -20,6 +20,7 @@ fi
 
 # Defaults
 _OTS_URI="https://onetimesecret.com"
+_OTS_URN="api/v1"
 _OTS_FMT="printf"  # "printf", "yaml", "json" or anything else == raw
 
 # --------------------
@@ -33,7 +34,7 @@ _OTS_FMT="printf"  # "printf", "yaml", "json" or anything else == raw
 _ots_join() { local d="$1"; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}"; }
 
 # Generate API URI
-_ots_api() { echo "${_OTS_URI}/api/v1"; }
+_ots_api() { echo "${_OTS_URI}/${_OTS_URN}"; }
 
 # Generate the auth arguments
 _ots_auth() {
@@ -52,7 +53,7 @@ _ots_output() {
     json)   jq "." - ;;
     yaml)   jq -r "to_entries|map(\"\(.key): \(.value)\")|.[]" - ;;
     # printf assumes $1 = printf format; remaining argumets are sent to jq
-    printf) printf "${1}" "$(jq "${@:2}" -)" ;;
+    printf) printf "${1}" "$(jq -r "${@:2}" -)" ;;
     # anything else is 'raw'
     raw|*)  cat - ;;
   esac
@@ -83,7 +84,7 @@ ots_format() { _OTS_FMT="$1"; }
 # check on status of OTS server
 ots_status() {
   curl -s $(_ots_auth) "$(_ots_api)/status" \
-    | _ots_output '%s\n' -r '.status // .message // "Unknown Error"'
+    | _ots_output '%s\n' '.status // .message // "Unknown Error"'
 }
 
 # Share a secret, which is assumed to come in on STDIN.
@@ -93,7 +94,7 @@ ots_status() {
 ots_share() {
   local ARGS; ARGS=$(_ots_join " -F " "" "$@")
   curl -s $(_ots_auth) $ARGS -F secret='<-' "$(_ots_api)/share" \
-    | _ots_output "$_OTS_URI/secret/%s\n" -r '.secret_key'
+    | _ots_output "$_OTS_URI/secret/%s\n" '.secret_key'
 }
 
 # Generate a random secret.
@@ -103,19 +104,19 @@ ots_share() {
 ots_generate() {
   local ARGS; ARGS=$(_ots_join " -F " "" "$@")
   curl -s $(_ots_auth) ${ARGS:--d "''"} "$(_ots_api)/generate" \
-    | _ots_output "$_OTS_URI/secret/%s\n" -r '.secret_key'
+    | _ots_output "$_OTS_URI/secret/%s\n" '.secret_key'
 }
 
 # Retrieve the secret data; Secret key given on the command line.
 ots_get() { ots_retrieve "$@"; }
 ots_retrieve() {
   curl -s -d '' $(_ots_api)/secret/$1 \
-    | _ots_output '%s\n' -r '.value // .message // "Unknown Error"'
+    | _ots_output '%s\n' '.value // .message // "Unknown Error"'
 }
 
 # retrieve the metadata for a secret
 ots_metadata() {
-  curl -s -d '' $(_ots_api)/private/$1 \
+  curl -s -d '' $(ots_metaurl "$1") \
     | _ots_output '%s\n' '.'
 }
 
@@ -130,7 +131,7 @@ ots_recent() {
 
   echo curl -s $(_ots_auth) -d '' $(_ots_api)/metadata/recent \
     | cat -
-#   | _ots_output '%s\n' -r '.value // .message // "Unknown Error"'
+#   | _ots_output '%s\n' '.value // .message // "Unknown Error"'
 }
 
 # burn a secret, given the metadata key
@@ -139,13 +140,21 @@ ots_recent() {
 
 # check on state of a secret, given the metadata key
 ots_state() {
-  curl -s -d '' $(_ots_api)/private/$1 \
-    | _ots_output '%s\n' -r '.state // .message // "unknown"'
+  curl -s -d '' $(ots_metaurl "$1") \
+    | _ots_output '%s\n' '.state // .message // "unknown"'
 }
 
 # Get the secret url for a secret, given the metadata key
-#ots_url() {
-#}
+ots_url() { ots_secret_url "$@"; }
+ots_secret_url() {
+  echo foo
+}
+
+# Get the metadata url for a secret, given the metadata key
+ots_metaurl() { ots_metadata_url "$@"; }
+ots_metadata_url() {
+  echo $(_ots_api)/private/$1
+}
 
 # --------------------
 # Check if we are being sourced only for our functions
@@ -178,7 +187,7 @@ while [[ $# -ge 1 ]]; do
     -D|--debug)		 _OTS_DEBUG=echo		; shift	  ;;
     -H|--help)		 echo "need help"		; exit	  ;;
     #
-    status|share|generate|get|retrieve|metadata|recent|state|url)
+    status|share|generate|get|retrieve|metadata|recent|state|url|metaurl)
       ACTION="$1"					; shift	  ;;
     #
     -r=*|--recipient=*)	 ARGS+=("recipient=${1#*=}")	; shift	  ;;
