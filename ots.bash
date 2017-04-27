@@ -23,7 +23,7 @@ _OTS_URI="https://onetimesecret.com"
 _OTS_URN="api/v1"
 _OTS_FMT="printf"  # "printf", "yaml", "json" or anything else == raw
 
-# --------------------
+# ------------------------------------------------------------
 # Internal only functions
 
 # join all but the first arg together, separated by the first arg
@@ -72,7 +72,7 @@ _ots_output() {
 #  done
 #}
 
-# --------------------
+# ------------------------------------------------------------
 # Exepcted entry-point functions - API and others
 
 # Set/save authenticated user (email) / key / host
@@ -139,6 +139,7 @@ ots_recent() {
 
 # burn a secret, given the metadata key
 #ots_burn() {
+# no burn api call - fake it how?
 #}
 
 # check on state of a secret, given the metadata key
@@ -147,19 +148,20 @@ ots_state() {
     | _ots_output '%s\n' '.state // .message // "unknown"'
 }
 
-# Get the secret url for a secret, given the metadata key
+# Get the (user-friendly) secret url for a secret, given the metadata key
 ots_url() { ots_secret_url "$@"; }
 ots_secret_url() {
-  echo foo
+  curl -s -d '' $(ots_metaurl "$1") \
+    | _ots_output "$_OTS_URI/secret/%s\n" -r '.secret_key'
 }
 
-# Get the metadata url for a secret, given the metadata key
+# Get the (API) metadata url for a secret, given the metadata key
 ots_metaurl() { ots_metadata_url "$@"; }
 ots_metadata_url() {
-  echo $(_ots_api)/private/$1
+  echo "$(_ots_api)/private/$1"
 }
 
-# --------------------
+# ------------------------------------------------------------
 # Check if we are being sourced only for our functions
 
 # if this is being sourced by some other script, return now.
@@ -180,7 +182,7 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]] ; then
   return
 fi
 
-# --------------------
+# ------------------------------------------------------------
 # Running standalone - parse args and do something useful
 
 # Collect form args in an array to pass to the function
