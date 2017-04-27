@@ -41,7 +41,12 @@ _ots_auth() {
 
 # output results, as formatted, json, yaml or raw.
 _ots_output() {
-  case "${_OTS_FMT,,}" in
+  local FMT=${_OTS_FMT}
+  if [[ "${string,,}" == @(json|yaml|printf|raw) ]]; then
+    FMT=${1}; shift
+  fi
+
+  case "${FMT,,}" in
     json)   jq "." - ;;
     yaml)   jq -r "to_entries|map(\"\(.key): \(.value)\")|.[]" - ;;
     # printf assumes $1 = printf format; remaining argumets are sent to jq
@@ -71,6 +76,10 @@ ots_key()  { _OTS_KEY="$1"; }
 
 # --------------------
 # Functions calls corresponding to API calls
+
+# check on status of OTS server
+#ots_status {
+#}
 
 # Share a secret, which is assumed to come in on STDIN.
 # All arguments are assumed to be correct of the form
@@ -119,7 +128,13 @@ ots_recent() {
 #   | _ots_output '%s\n' -r '.value // .message // "Unknown Error"'
 }
 
-# Get the secret url for a secret given the metadata key
+# burn a secret, given the metadata key
+#ots_burn {
+#}
+# check on state of a secret, given the metadata key
+#ots_state {
+#}
+# Get the secret url for a secret, given the metadata key
 #ots_url() {
 #}
 
