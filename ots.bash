@@ -5,8 +5,11 @@
 #
 # Requires:
 # - bash 4.x -- for associative arrays
-# - curl     -- for accessing the ots api
-# - jq       -- for parsing json output
+# - curl     -- for accessing the OTS API
+# - jq       -- for parsing json and formatting output
+#
+# Author: Eric Engstrom (engstrom(-AT-)m t u(-DOT-)n e t)
+# See README.md and LICENSE.
 ##
 
 # Check bash version; exit if not sufficient
@@ -61,13 +64,13 @@ _ots_output() {
 #  done
 #}
 
-# --------------------
-# Functions for use if sourced
-
 # Set/save authenticated user (email) / key / host
 ots_host() { _OTS_URI="$1"; }
 ots_user() { _OTS_USER="$1"; }
 ots_key()  { _OTS_KEY="$1"; }
+
+# --------------------
+# Functions calls corresponding to API calls
 
 # Share a secret, which is assumed to come in on STDIN.
 # All arguments are assumed to be correct of the form
@@ -166,7 +169,7 @@ while [[ $# -ge 1 ]]; do
     -k	|--key)		 ots_key "$2"			; shift 2 ;;
     #
     -f  |--format)	 _OTS_FMT="$2"  		; shift 2 ;;
-    yaml|json)		 _OTS_FMT="$1"  		; shift   ;;
+    yaml|json|raw)	 _OTS_FMT="$1"  		; shift   ;;
     #
     -s=*|--secret=*)	 SECRET="${1#*=}"		; shift	  ;;
     -s	|--secret)	 SECRET="$2"			; shift 2 ;;
