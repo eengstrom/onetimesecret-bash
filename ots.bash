@@ -29,7 +29,7 @@ _OTS_OUT="url"     # "url", "metadata[_key]" - what is output from share|generat
 
 # join all but the first arg together, separated by the first arg
 # e.g. $(join : foo bar baz) returns "foo:bar:baz"
-#_ots_join() { local IFS; IFS="$1"; shift; echo "$@"; }
+#_ots_join() { local IFS; IFS="$1"; echo "${*:2}"; }
 # another idea with multi-char separators:
 # http://stackoverflow.com/questions/1527049/join-elements-of-an-array
 _ots_join() { local d="$1"; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}"; }
@@ -48,7 +48,7 @@ _ots_auth() {
 _ots_output() {
   local FMT=${_OTS_FMT}
   if [[ "${1,,}" == @(json|yaml|fmt|printf|raw) ]]; then
-    FMT=${1}; shift
+    FMT="${1}"; shift
   fi
 
   case "${FMT,,}" in
@@ -95,7 +95,7 @@ ots_status() {
 # and further are assumed to be supported by the 'share' API form.
 ots_share() {
   local ARGS; ARGS=$(_ots_join " -F " "" "${@}")
-  curl -s $(_ots_auth) $ARGS -F secret='<-' "$(_ots_api)/share" \
+  curl -s -X POST $(_ots_auth) ${ARGS} -F secret='<-' "$(_ots_api)/share" \
     | _ots_output "$_OTS_URI/secret/%s\n" '.secret_key'
 }
 
@@ -105,7 +105,7 @@ ots_share() {
 # and further are assumed to be supported by the 'generate' API form.
 ots_generate() {
   local ARGS; ARGS=$(_ots_join " -F " "" "${@}")
-  curl -s $(_ots_auth) ${ARGS:--d "''"} "$(_ots_api)/generate" \
+  curl -s -X POST $(_ots_auth) ${ARGS:--d "''"} "$(_ots_api)/generate" \
     | _ots_output "$_OTS_URI/secret/%s\n" '.secret_key'
 }
 
@@ -114,13 +114,19 @@ ots_get() { ots_retrieve "$@"; }
 ots_retrieve() {
   local KEY;  KEY="${@: -1}"
   local ARGS; ARGS=$(_ots_join " -F " "" "${@:1:$(($#-1))}")
-  curl -s ${ARGS:--d "''"} $(_ots_api)/secret/$KEY \
+  curl -s -X POST ${ARGS:--d "''"} $(_ots_api)/secret/$KEY \
     | _ots_output '%s\n' '.value // .message // "Unknown Error"'
+}
+
+# burn a secret, given the metadata key
+ots_burn() {
+  curl -s -X POST $(_ots_auth) -d '' $(_ots_metaapi "$1")/burn \
+    | _ots_output '%s\n' '.state // .message // "Unknown Error"'
 }
 
 # retrieve the metadata for a secret
 ots_metadata() {
-  curl -s -d '' $(_ots_metaapi "$1") \
+  curl -s -X POST -d '' $(_ots_metaapi "$1") \
     | _ots_output '%s\n' '.'
 }
 
@@ -131,26 +137,20 @@ ots_recent() {
     return
   fi
 
-  #curl -s $(_ots_auth) -X GET -d '' $(_ots_api)/metadata/recent \
-  curl -s $(_ots_auth) -X GET -d '' $(_ots_api)/private/recent \
+  curl -s -X GET $(_ots_auth) -d '' $(_ots_api)/private/recent \
     | _ots_output '%s\n' 'if type=="array" then .[].metadata_key else .message end // "Unknown Error"'
 }
 
-# burn a secret, given the metadata key
-#ots_burn() {
-# no burn api call - fake it how?
-#}
-
 # check on state of a secret, given the metadata key
 ots_state() {
-  curl -s -d '' $(_ots_metaapi "$1") \
+  curl -s -X POST -d '' $(_ots_metaapi "$1") \
     | _ots_output '%s\n' '.state // .message // "unknown"'
 }
 
 # get the secret key for a secret, given the metadata key
 ots_key() { ots_secret_key "$@"; }
 ots_secret_key() {
-  curl -s -d '' $(_ots_metaapi "$1") \
+  curl -s -X POST -d '' $(_ots_metaapi "$1") \
     | _ots_output "%s\n" '.secret_key'
 }
 
@@ -201,7 +201,7 @@ while [[ $# -ge 1 ]]; do
     -f  |--format)       ots_set_format "$2"            ; shift 2 ;;
     yaml|json|fmt|raw)   ots_set_format "$1"            ; shift   ;;
     # Action
-    status|share|generate|get|retrieve|metadata|recent|state|key|url|metaurl)
+    status|share|generate|get|retrieve|burn|metadata|recent|state|key|url|metaurl)
                          ACTION="$1"                    ; shift   ;;
     # Secrets are collected in the ARGS
     -s=*|--secret=*)     ARGS+=("${1#*=}")              ; shift   ;;
