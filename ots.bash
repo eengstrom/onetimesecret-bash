@@ -14,14 +14,14 @@
 
 # Check bash version; exit if not sufficient
 if ((${BASH_VERSINFO[0]} < 4)); then
-  echo "ERROR: Bash version >= 4.0 required"
+  echo "ERROR: Bash version >= 4.0 required" 1>&2
   [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 1 || exit 1
 fi
 
 # Defaults
 _OTS_URI="https://onetimesecret.com"
 _OTS_URN="api/v1"
-_OTS_FMT="printf"  # "printf", "yaml", "json" or anything else == raw
+_OTS_FMT="fmt"     # "fmt|printf", "yaml", "json" or anything else == raw
 _OTS_OUT="url"     # "url", "metadata[_key]" - what is output from share|generate
 
 # ------------------------------------------------------------
@@ -34,7 +34,7 @@ _OTS_OUT="url"     # "url", "metadata[_key]" - what is output from share|generat
 # http://stackoverflow.com/questions/1527049/join-elements-of-an-array
 _ots_join() { local d="$1"; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}"; }
 
-# Generate API URI
+# Generate API URI, metadata API URL (given metadata key)
 _ots_api() { echo "${_OTS_URI}/${_OTS_URN}"; }
 _ots_metaapi() { echo "$(_ots_api)/private/$1"; }
 
@@ -47,17 +47,17 @@ _ots_auth() {
 # output results, as formatted, json, yaml or raw.
 _ots_output() {
   local FMT=${_OTS_FMT}
-  if [[ "${string,,}" == @(json|yaml|printf|raw) ]]; then
+  if [[ "${1,,}" == @(json|yaml|fmt|printf|raw) ]]; then
     FMT=${1}; shift
   fi
 
   case "${FMT,,}" in
-    json)   jq "." - ;;
-    yaml)   jq -r "to_entries|map(\"\(.key): \(.value)\")|.[]" - ;;
+    json)       jq "." - ;;
+    yaml)       jq -r "to_entries|map(\"\(.key): \(.value)\")|.[]" - ;;
     # printf assumes $1 = printf format; remaining argumets are sent to jq
-    printf) printf "${1}" "$(jq -r "${@:2}" -)" ;;
+    fmt|printf) printf "${1}" "$(jq -r "${@:2}" -)" ;;
     # anything else is 'raw'
-    raw|*)  cat - ;;
+    raw|*)      cat - ;;
   esac
 }
 
@@ -127,16 +127,13 @@ ots_metadata() {
 # retrieve recent metadata keys; requires auth tokens
 ots_recent() {
   if [ -z "$(_ots_auth)" ]; then
-    echo Recent metadata requires authentication information.
+    echo "Recent metadata requires authentication information." 1>&2
     return
   fi
 
-  echo "this is not working against the standard server - issue submitted"
-  echo curl -s $(_ots_auth) -d '' $(_ots_api)/metadata/recent
-  echo curl -s $(_ots_auth) -d '' $(_ots_api)/private/recent
-
-#  curl -u "$USER:$KEY" -d '' $(_ots_api)/metadata/recent
-#   | _ots_output '%s\n' '.value // .message // "Unknown Error"'
+  #curl -s $(_ots_auth) -X GET -d '' $(_ots_api)/metadata/recent \
+  curl -s $(_ots_auth) -X GET -d '' $(_ots_api)/private/recent \
+    | _ots_output '%s\n' 'if type=="array" then .[].metadata_key else .message end // "Unknown Error"'
 }
 
 # burn a secret, given the metadata key
@@ -174,11 +171,11 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]] ; then
   # parse some arguments for configuration
   while [[ $# -ge 1 ]]; do
     case "$1" in
-      -h  |--host)       ots_set_host "$2"              ; shift 2 ;;
-      -u  |--user)       ots_set_user "$2"              ; shift 2 ;;
-      -k  |--key)        ots_set_key "$2"               ; shift 2 ;;
-      -f  |--format)     ots_set_format "$2"            ; shift 2 ;;
-      *)                 echo "unknown option '$1'"     ; shift   ;;
+      -h  |--host)       ots_set_host "$2"               ; shift 2 ;;
+      -u  |--user)       ots_set_user "$2"               ; shift 2 ;;
+      -k  |--key)        ots_set_key "$2"                ; shift 2 ;;
+      -f  |--format)     ots_set_format "$2"             ; shift 2 ;;
+      *)                 echo "unknown option '$1'" 1>&2 ; shift   ;;
     esac
   done
 
@@ -202,7 +199,7 @@ while [[ $# -ge 1 ]]; do
     -k  |--key)          ots_set_key "$2"               ; shift 2 ;;
     # Otuput format
     -f  |--format)       ots_set_format "$2"            ; shift 2 ;;
-    yaml|json|raw)       ots_set_format "$1"            ; shift   ;;
+    yaml|json|fmt|raw)   ots_set_format "$1"            ; shift   ;;
     # Action
     status|share|generate|get|retrieve|metadata|recent|state|key|url|metaurl)
                          ACTION="$1"                    ; shift   ;;
