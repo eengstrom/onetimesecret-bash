@@ -151,7 +151,8 @@ ots_state() {
 ots_key() { ots_secret_key "$@"; }
 ots_secret_key() {
   curl -s -X POST -d '' $(_ots_metaapi "$1") \
-    | _ots_output "%s\n" '.secret_key'
+    | _ots_output FMT "%s\n" '.secret_key'
+    # Note forced output to format (FMT) via printf.
 }
 
 # Get the (user-friendly) secret url for a secret, given the metadata key
