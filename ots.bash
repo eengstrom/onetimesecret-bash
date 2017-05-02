@@ -22,7 +22,6 @@ fi
 _OTS_URI="https://onetimesecret.com"
 _OTS_URN="api/v1"
 _OTS_FMT="fmt"     # "fmt|printf", "yaml", "json" or anything else == raw
-_OTS_OUT="url"     # "url", "metadata[_key]" - what is output from share|generate
 
 # ------------------------------------------------------------
 # Internal only functions
@@ -90,23 +89,47 @@ ots_status() {
 }
 
 # Share a secret, which is assumed to come in on STDIN.
-# All arguments are assumed to be correct of the form
+#
+# Optional first arg of '[-]metadata[_key]' returns only metadata_key,
+# otherwise return secret url.
+#
+# All remaining arguments are assumed to be correct of the form
 #   PARAM=VALUE
 # and further are assumed to be supported by the 'share' API form.
 ots_share() {
+  local FMT="$_OTS_URI/secret/%s\n"
+  local JQF='.secret_key'
+
+  # if optional first arg is something like -?metadata(_key?), ouput private key only.
+  if [[ "${1,,}" == ?(-)metadata?(_key) ]]; then
+    FMT="%s\n"; JQF='.metadata_key'; shift
+  fi
+
   local ARGS; ARGS=$(_ots_join " -F " "" "${@}")
   curl -s -X POST $(_ots_auth) ${ARGS} -F secret='<-' "$(_ots_api)/share" \
-    | _ots_output "$_OTS_URI/secret/%s\n" '.secret_key'
+    | _ots_output "${FMT}" "${JQF}"
 }
 
 # Generate a random secret.
-# All arguments are assumed to be correct of the form
+#
+# Optional first arg of '-metadata[_key]' returns only metadata_key,
+# otherwise return secret url.
+#
+# All remaining arguments are assumed to be correct of the form
 #   PARAM=VALUE
 # and further are assumed to be supported by the 'generate' API form.
 ots_generate() {
+  local FMT="$_OTS_URI/secret/%s\n"
+  local JQF='.secret_key'
+
+  # if optional first arg is something like -?metadata(_key?), ouput private key only.
+  if [[ "${1,,}" == ?(-)metadata?(_key) ]]; then
+    FMT="%s\n"; JQF='.metadata_key'; shift
+  fi
+
   local ARGS; ARGS=$(_ots_join " -F " "" "${@}")
   curl -s -X POST $(_ots_auth) ${ARGS:--d "''"} "$(_ots_api)/generate" \
-    | _ots_output "$_OTS_URI/secret/%s\n" '.secret_key'
+    | _ots_output "${FMT}" "${JQF}"
 }
 
 # Retrieve the secret data; Secret key given on the command line.
