@@ -1,9 +1,9 @@
-Command-line tool and BASH API client for One-Time Secret https://onetimesecret.com/
+<!-- onetimesecret-bash -- easy visual editor: https://stackedit.io/editor# -->
 
-#### <a name="abstract"></a> Abstract
+## <a name="abstract"></a> Abstract
 ots.bash is a bash-based command-line tool and API client for [One-Time Secret](https://onetimesecret.com/).  It provides easy, scriptable or command-line access to all features of One-Time Secret, plus a few extra tidbits.
 
-#### <a name="examples"></a> Examples
+## <a name="examples"></a> Examples
 
 Simple command-line use cases:
 
@@ -37,7 +37,7 @@ Simple command-line use cases:
 
         ./ots --help
 
-#### <a name="apiusage"></a> API Usage
+## <a name="apiusage"></a> API Usage
 
 The same script can be sourced for it's functions so you may make use
 of the OTS API via functions in your own script:
@@ -84,5 +84,3 @@ all of which begin `ots_`, as in:
 
 For more examples, see also the `test.shunit` unit tests.
 
-# onetimesecret-bash
-# edit at https://stackedit.io/editor#
