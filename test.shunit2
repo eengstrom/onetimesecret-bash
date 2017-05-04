@@ -1,0 +1,216 @@
+#!/usr/bin/env bash            # -*- mode: shell-script -*-
+#
+# Test ots.bash, using shUnit2, and provide lots of usage examples.
+# shUnit2: https://github.com/kward/shunit2
+##
+
+oneTimeSetUp() {
+  # source for use anonymously (secrets created anonymously)
+  source ots.bash
+
+  # source with specific auth credentials
+  APIUSER="USERNAME"
+  APIKEY="APIKEY"
+  test -e ".ots.creds" && source .ots.creds
+  #source ots.bash -u $APIUSER -k $APIKEY
+
+  # or specify / store them by function
+  #ots_set_host "https://onetimesecret.com"
+  #ots_set_user "USERNAME"
+  #ots_set_key  "APIKEY"
+
+  # Generate a random string to reuse for a secret
+  SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+}
+
+
+XtestJoin() {
+  assertNull                  "$(_ots_join \& )"
+  assertEquals 'foo' 	      "$(_ots_join \& foo )"
+  assertEquals 'foo&bar&baz'  "$(_ots_join \& foo bar baz)"
+}
+
+XtestJQ() {
+  (jq '.' <<<'{ "foo": "bar" }') > /dev/null 2>&1 \
+    || fail "JQ parse error"
+  (jq '.bar // ' <<<'{ "foo": "bar" }') > /dev/null 2>&1 \
+    || fail "JQ parse error"
+  }
+
+XtestStatus() {
+  assertEquals $(ots_status) "nominal"
+  assertEquals $(./ots status) "nominal"
+}
+
+urlkey() { echo "$1" | awk -F / '{print $NF}'; }
+shareAndGet() {
+  local URL=$("$@")
+  local KEY=$(urlkey $URL)
+  ots_get $KEY
+}
+
+XtestShareAndGet() {
+  assertEquals "Single Secret" "$SECRET" \
+               "$(shareAndGet ./ots share -s "$SECRET")"
+
+  assertEquals "Two Part Secret" "$SECRET PART 2" \
+               "$(shareAndGet ./ots share -s "$SECRET" --secret="PART 2")"
+
+  assertEquals "MultiLine Secret" "$SECRET
+On Multiple Lines"  \
+               "$(shareAndGet ./ots share -s "$SECRET" --secret="
+On Multiple Lines")"
+
+  assertEquals "Extra Args Secret"  "$SECRET" \
+               "$(shareAndGet ./ots share -- "$SECRET")"
+
+  assertEquals "STDIN Secret"     "$SECRET" \
+               "$(echo "$SECRET" | shareAndGet ./ots share)"
+
+}
+
+XtestShareAndBurn() {
+  local KEY=$(./ots share --private <<< "$SECRET")
+
+  assertNotNull "State generated; non null" "$KEY"
+
+  assertEquals "State Secret: 'new'" 'new' \
+               "$(ots_state "$KEY")"
+
+  assertEquals "State Secret: 'viewed'" 'viewed' \
+               "$(ots_state "$KEY")"
+
+  assertEquals "Burn a secret." 'burned' \
+               "$(ots_burn "$KEY")"
+
+  assertEquals "State Secret: 'burned'" 'burned' \
+               "$(ots_state "$KEY")"
+
+  assertEquals "Try to burn again." 'Unknown secret' \
+               "$(ots_burn "$KEY")"
+
+  assertEquals "Try get burned secret." 'Unknown secret' \
+               "$(ots_get "$KEY")"
+}
+
+
+XtestGenerate() {
+  local KEY=$(./ots generate --private <<< "$SECRET")
+
+  assertNotNull "State generated; non null" "$KEY"
+
+  # For some reason, generated secrets are "immediately" viewed.
+  # assertEquals "State Secret: 'new'" 'new' \
+  #              "$(ots_state "$KEY")"
+
+  assertEquals "State Secret: 'viewed'" 'viewed' \
+               "$(ots_state "$KEY")"
+
+  assertEquals "Burn a secret." 'burned' \
+               "$(ots_burn "$KEY")"
+
+  assertEquals "State Secret: 'burned'" 'burned' \
+               "$(ots_state "$KEY")"
+
+}
+
+XtestMetadata() {
+  local METAKEY=$(./ots share --private <<< "$SECRET")
+
+  assertNotNull "State generated; non null" "$METAKEY"
+
+  local DATA=$(ots_metadata "$METAKEY")
+  assertNotNull "Empty Metadata?" "$DATA"
+
+  (jq "." <<< "$DATA") >/dev/null 2>&1 \
+    || fail "invalid JSON ouptut?"
+
+  assertNotEquals "Metadata State has key'" 'null' \
+                  $(jq ".metadata_key" <<< "$DATA")
+
+  assertEquals "Metadata State: 'new'" '"new"' \
+               $(jq ".state" <<< "$DATA")
+
+  # Now get the secret key, given the metadata key
+  local KEY=$(ots_key $METAKEY)
+  assertNotNull "Empty Secret Key?" "$KEY"
+
+  # fetch the secret, compare, then check state again
+  assertEquals "Secret isn't valid." "$SECRET" \
+               $(ots_get "$KEY")
+
+  # refetch the metadata
+  DATA=$(ots_metadata "$METAKEY")
+  assertNotNull "Empty Metadata?" "$DATA"
+
+  assertEquals "Metadata State: 'received'" '"received"' \
+               $(jq ".state" <<< "$DATA")
+
+  assertEquals "Secret State: 'received'" 'received' \
+               $(ots_state "$METAKEY")
+}
+
+XtestRecent() {
+  # unauthenticated should fail
+  assertEquals "Unauth recent() call" 'Authentication Required' \
+               "$(ots_recent 2>&1)"
+
+  # remaining tests require credentials 
+  if [ \! -e ".ots.creds" ]; then
+    echo "SKIPPING auth-required tests"
+    return
+  fi
+
+  # get the credentials
+  source .ots.creds
+  
+  # resource/setup ots.bash
+  #source ots.bash -u $APIUSER -k $APIKEY
+
+  # or specify / store them by function
+  #ots_set_host "https://onetimesecret.com"
+  ots_set_user "$APIUSER"
+  ots_set_key  "$APIKEY"
+
+  # Create a new secret.
+  local METAKEY=$(ots_share --private <<< "$SECRET")
+  local FIRST=$(ots_recent | head -1)
+
+  # check that they are the same
+  assertEquals "Recent secrets not equal" "$METAKEY" "$FIRST"
+  
+  # check state, fetch the secret, compare, then check state again
+
+  assertEquals "Secret State: 'new'" 'new' \
+               $(ots_state "$METAKEY")
+
+  assertEquals "Secret isn't valid." "$SECRET" \
+               $(ots_retrieve $(ots_key "$METAKEY"))
+
+  assertEquals "Secret State: 'received'" 'received' \
+               $(ots_state "$METAKEY")
+  
+  # remove authentication credentials
+  ots_set_user ""
+  ots_set_key  ""
+
+  # unauthenticated should fail, again
+  assertEquals "Unauth recent() call" 'Authentication Required' \
+               "$(ots_recent 2>&1)"
+}
+
+
+XtestEncryptedSecrets() {
+  fail "need to test encrypted secrets"
+}
+
+XtestGetWithURLs() {
+  local URL=$(ots_share <<< "$SECRET")
+
+  assertEquals "Secret isn't valid." "$SECRET" \
+               "$(ots_retrieve "$URL")"
+}
+
+
+# load shunit2 - assumes (symlink) in current directory
+source shunit2
