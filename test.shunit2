@@ -69,6 +69,14 @@ On Multiple Lines")"
 
 }
 
+testGetWithURLs() {
+  local URL=$(ots_share <<< "$SECRET")
+
+  assertEquals "Secret isn't valid." "$SECRET" \
+               "$(ots_retrieve "$URL")"
+}
+
+
 XtestShareAndBurn() {
   local KEY=$(./ots share --private <<< "$SECRET")
 
@@ -204,12 +212,6 @@ XtestEncryptedSecrets() {
   fail "need to test encrypted secrets"
 }
 
-XtestGetWithURLs() {
-  local URL=$(ots_share <<< "$SECRET")
-
-  assertEquals "Secret isn't valid." "$SECRET" \
-               "$(ots_retrieve "$URL")"
-}
 
 
 # load shunit2 - assumes (symlink) in current directory

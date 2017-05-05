@@ -148,6 +148,10 @@ ots_generate() {
 ots_get() { ots_retrieve "$@"; }
 ots_retrieve() {
   local KEY;  KEY="${@: -1}"
+  # grab just the key portion, if url looking thing found
+  if [[ "$KEY" =~ "$_OTS_URI" ]]; then
+    KEY=${KEY##*/}
+  fi
   local ARGS; ARGS=$(_ots_join " -F " "" "${@:1:$(($#-1))}")
   _ots_curl -X POST ${ARGS:--d "''"} $(_ots_api)/secret/$KEY \
     | _ots_output '%s\n' '.value // .message // "Unknown Error"'
