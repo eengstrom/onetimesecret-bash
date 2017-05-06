@@ -1,7 +1,7 @@
-<!-- onetimesecret-bash -- easy visual editor: https://stackedit.io/editor# -->
+<!-- onetimesecret-bash -- markdown visual editor: http://dillinger.io/ -->
 
 ## <a name="abstract"></a> Abstract
-ots.bash is a bash-based command-line tool and API client for [One-Time Secret](https://onetimesecret.com/).  It provides easy, scriptable or command-line access to all features of One-Time Secret, plus a few extra tidbits.
+`ots.bash` is a bash-based command-line tool and API client for [One-Time Secret](https://onetimesecret.com/).  It provides easy, scriptable or command-line access to all features of One-Time Secret, plus a few extra tidbits.
 
 ## <a name="examples"></a> Examples
 
@@ -13,27 +13,37 @@ Simple command-line use cases:
 
 * Share a secret, providing via STDIN or command line arguments:
 
-        ./ots share --secret "this is super secret"
+        ./ots share --secret "this is super secret."
 
-        ./ots share -- All remaining argments _are_ the secret
+        ./ots share -- All remaining arguments after the '"--"' _are_ the secret.
 
-        ./ots share <<< "Something else super via HERESTRING"
+        ./ots share <<< "Something else super secret via HERESTRING"
 
         ./ots share <<-EOF
             This is a mulit-line secret via HEREDOC.
             Somthing else goes here.
         EOF
 
+    Note that while the script supports secrets on the command line, they are inherently less secure because anyone with access to the same machine could view them via `ps`, so `HEREDOC` or `HERESTRING` are better choices.
+
 * Generate a random secret:
 
         ./ots generate
+
+* Speciify options for shared or generated secrets:
+
+        ./ots share ttl=600 \
+                    passphrase="shared-secret" \
+                    recipient="someone@somewhere.com" <<< "SECRET"
+                    
+    Note that any arguments not explicitly understood by the script are passed to the underlying action function (e.g. `share`), which in most cases are then simply passed to `curl`, so *caveat utilitor*.
 
 * Get/Retrieve a secret:
 
         ./ots get <key|url>
         ./ots retrieve <key|url>
 
-* Use `--help` for complete list of command line actions
+* Use `--help` for complete list of command line actions and known options:
 
         ./ots --help
 
@@ -65,13 +75,18 @@ all of which begin `ots_`, as in:
     local URL=$(echo "secret" | ots_share)
 
     # share a multi line secret via HEREDOC.
-    ots_share <<-EOF
+    URL=ots_share <<-EOF
     	This is a Secret
         ... on multiple lines
     EOF
 
+    # pass options to share or generate.
+    URL=$(ots_share ttl=600 \
+                    passphrase="shared-secret" \
+                    recipient="someone@somewhere.com" <<< "SECRET")
+
     # fetch the secret data
-    local DATA=$(ots_retrieve "$URL")
+    local DATA="$(ots_retrieve "$URL")"
 
     # generate a new secret, and get back the private metadata key
     local KEY=$(ots_generate --private)
@@ -82,5 +97,5 @@ all of which begin `ots_`, as in:
     # burn a secret, given the private key
     ots_burn $KEY
 
-For more examples, see also the `test.shunit` unit tests.
+For lots more examples, see also the `test.shunit` unit tests script.
 
