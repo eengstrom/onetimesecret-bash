@@ -35,7 +35,7 @@ XtestJQ() {
     || fail "JQ parse error"
   (jq '.bar // ' <<<'{ "foo": "bar" }') > /dev/null 2>&1 \
     || fail "JQ parse error"
-  }
+}
 
 XtestStatus() {
   assertEquals $(ots_status) "nominal"
@@ -58,7 +58,7 @@ XtestShareAndGet() {
 
   assertEquals "MultiLine Secret" "$SECRET
 On Multiple Lines"  \
-               "$(shareAndGet ./ots share -s "$SECRET" --secret="
+               "$(shareAndGet ./ots share -s "$SECRET
 On Multiple Lines")"
 
   assertEquals "Extra Args Secret"  "$SECRET" \
@@ -67,12 +67,20 @@ On Multiple Lines")"
   assertEquals "STDIN Secret"     "$SECRET" \
                "$(echo "$SECRET" | shareAndGet ./ots share)"
 
+  assertEquals "STDIN Multiline"  "$SECRET
+$SECRET" \
+               "$(shareAndGet ./ots share <<EOF
+$SECRET
+$SECRET
+EOF
+)"
+
 }
 
-testGetWithURLs() {
+XtestGetWithURLs() {
   local URL=$(ots_share <<< "$SECRET")
 
-  assertEquals "Secret isn't valid." "$SECRET" \
+  assertEquals "Fetch Secret with URL" "$SECRET" \
                "$(ots_retrieve "$URL")"
 }
 
@@ -163,7 +171,7 @@ XtestRecent() {
   assertEquals "Unauth recent() call" 'Authentication Required' \
                "$(ots_recent 2>&1)"
 
-  # remaining tests require credentials 
+  # remaining tests require credentials
   if [ \! -e ".ots.creds" ]; then
     echo "SKIPPING auth-required tests"
     return
@@ -171,7 +179,7 @@ XtestRecent() {
 
   # get the credentials
   source .ots.creds
-  
+
   # resource/setup ots.bash
   #source ots.bash -u $APIUSER -k $APIKEY
 
@@ -186,7 +194,7 @@ XtestRecent() {
 
   # check that they are the same
   assertEquals "Recent secrets not equal" "$METAKEY" "$FIRST"
-  
+
   # check state, fetch the secret, compare, then check state again
 
   assertEquals "Secret State: 'new'" 'new' \
@@ -197,7 +205,7 @@ XtestRecent() {
 
   assertEquals "Secret State: 'received'" 'received' \
                $(ots_state "$METAKEY")
-  
+
   # remove authentication credentials
   ots_set_user ""
   ots_set_key  ""

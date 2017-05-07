@@ -8,7 +8,7 @@
 # - curl     -- for accessing the OTS API
 # - jq       -- for parsing json and formatting output
 #
-# Author: Eric Engstrom (engstrom(-AT-)m t u(-DOT-)n e t)
+# Author: Eric Engstrom (eric.engstrom(-AT-)g.m.a.i.l(-DOT-)c o m)
 # See README.md and LICENSE.
 ##
 
@@ -55,7 +55,7 @@ _ots_auth() {
 
 # output results, as formatted, json, yaml or raw.
 _ots_output() {
-  local FMT=${_OTS_FMT}
+  local FMT=${_OTS_FMT:-fmt}
   if [[ "${1,,}" == @(json|yaml|fmt|printf|raw|debug) ]]; then
     FMT="${1}"; shift
   fi
@@ -140,7 +140,7 @@ ots_generate() {
   fi
 
   local ARGS; ARGS=$(_ots_join " -F " "" "${@}")
-  _ots_curl -X POST $(_ots_auth) ${ARGS:--d "''"} "$(_ots_api)/generate" \
+  _ots_curl -X POST $(_ots_auth) ${ARGS} "$(_ots_api)/generate" \
     | _ots_output "${FMT}" "${JQF}"
 }
 
@@ -153,20 +153,20 @@ ots_retrieve() {
     KEY=${KEY##*/}
   fi
   local ARGS; ARGS=$(_ots_join " -F " "" "${@:1:$(($#-1))}")
-  _ots_curl -X POST ${ARGS:--d "''"} $(_ots_api)/secret/$KEY \
+  _ots_curl -X POST ${ARGS} $(_ots_api)/secret/$KEY \
     | _ots_output '%s\n' '.value // .message // "Unknown Error"'
 }
 
 # burn a secret, given the metadata key
 ots_burn() {
   # This call is odd, as it returns a hierarchical JSON response.
-  _ots_curl -X POST $(_ots_auth) -d '' $(_ots_metaapi "$1")/burn \
+  _ots_curl -X POST $(_ots_auth) $(_ots_metaapi "$1")/burn \
     | _ots_output '%s\n' '.state.state // .message // "Unknown Error"'
 }
 
 # retrieve the metadata for a secret
 ots_metadata() {
-  _ots_curl -X POST -d '' $(_ots_metaapi "$1") \
+  _ots_curl -X POST $(_ots_metaapi "$1") \
     | _ots_output '%s\n' '.'
 }
 
@@ -177,20 +177,20 @@ ots_recent() {
     return
   fi
 
-  _ots_curl -X GET $(_ots_auth) -d '' $(_ots_api)/private/recent \
+  _ots_curl -X GET $(_ots_auth) $(_ots_api)/private/recent \
     | _ots_output '%s\n' 'if type=="array" then .[].metadata_key else .message end // "Unknown Error"'
 }
 
 # check on state of a secret, given the metadata key
 ots_state() {
-  _ots_curl -X POST -d '' $(_ots_metaapi "$1") \
+  _ots_curl -X POST $(_ots_metaapi "$1") \
     | _ots_output '%s\n' '.state // .message // "unknown"'
 }
 
 # get the secret key for a secret, given the metadata key
 ots_key() { ots_secret_key "$@"; }
 ots_secret_key() {
-  _ots_curl -X POST -d '' $(_ots_metaapi "$1") \
+  _ots_curl -X POST $(_ots_metaapi "$1") \
     | _ots_output FMT "%s\n" '.secret_key'
     # Note forced output to format (FMT) via printf.
 }
@@ -206,7 +206,7 @@ ots_metadata_url() { printf "$_OTS_URI/private/%s\n" "$@"; }
 # ------------------------------------------------------------
 # Check if we are being sourced only for our functions
 
-# if this is being sourced by some other script, return now.
+# If this is being sourced by some other script, parse config options and return.
 # idea: http://stackoverflow.com/questions/2683279/how-to-detect-if-a-script-is-being-sourced
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]] ; then
   # parse some arguments for configuration
