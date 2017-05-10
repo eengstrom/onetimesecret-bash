@@ -167,7 +167,7 @@ ots_burn() {
 # retrieve the metadata for a secret
 ots_metadata() {
   _ots_curl -X POST $(_ots_metaapi "$1") \
-    | _ots_output '%s\n' '.'
+    | _ots_output '%s\n' '.message // .'
 }
 
 # retrieve recent metadata keys; requires auth tokens
@@ -197,11 +197,11 @@ ots_secret_key() {
 
 # Get the (user-friendly) secret url for a secret, given the metadata key
 ots_url() { ots_secret_url "$@"; }
-ots_secret_url() { printf "$_OTS_URI/secret/%s\n" $(ots_key "$@"); }
+ots_secret_url() { printf "$_OTS_URI/secret/%s\n" $(ots_key "$1"); }
 
 # Get the (user-friendly) metadata url for a secret, given the metadata key
 ots_metaurl() { ots_metadata_url "$@"; }
-ots_metadata_url() { printf "$_OTS_URI/private/%s\n" "$@"; }
+ots_metadata_url() { printf "$_OTS_URI/private/%s\n" "$1"; }
 
 # ------------------------------------------------------------
 # Check if we are being sourced only for our functions
@@ -280,7 +280,7 @@ if [[ "${ACTION}" == "share" ]]; then
   fi
   #echo "${SECRET[@]}"
   _ots_debug "secret:" "${SECRET[@]}"
-  echo "${SECRET[@]}" | ots_share "${FORM[@]}" "${ARGS[@]}"
+  echo "${SECRET[@]}" | ots_share "${ARGS[@]}" "${FORM[@]}"
 else
   ots_$ACTION "${FORM[@]}" "${ARGS[@]}" "$@"
 fi
