@@ -31,7 +31,7 @@ _OTS_FMT="fmt"     # "fmt|printf", "yaml", "json" or anything else == raw
 # Internal only functions
 
 # Simple debug, but write output propery quoted
-_ots_debug() { test -n "$_OTS_DEBUG" && (printf "%q " "$@"; printf "\n"); }
+_ots_debug() { test -n "$_OTS_DEBUG" && (printf "%q " "$@"; printf "\n") 2>&1; }
 
 # join all but the first arg together, separated by the first arg
 # e.g. $(join : foo bar baz) returns "foo:bar:baz"
@@ -40,10 +40,19 @@ _ots_debug() { test -n "$_OTS_DEBUG" && (printf "%q " "$@"; printf "\n"); }
 # http://stackoverflow.com/questions/1527049/join-elements-of-an-array
 _ots_join() { local d="$1"; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}"; }
 
-# function to wrap curl usage
-_ots_curl()  { $_OTS_DEBUG curl -s "$@"; }
+# given a split value and an array of values, return index of split value
+_ots_index() {
+  split="$1"; shift
+  for ((i=1;i<=$#;++i)); do
+    [[ "${@:$i:1}" == "--" ]] && break
+  done
+  echo $i
+}
 
-# Generate API URI, metadata API URL (given metadata key)
+# function to wrap curl usage
+_ots_curl() { $_OTS_DEBUG curl -s "$@"; }
+
+# Generate API URI / Metadata API URL (given metadata key)
 _ots_api() { echo "${_OTS_URI}/${_OTS_URN}"; }
 _ots_metaapi() { echo "$(_ots_api)/private/$1"; }
 
@@ -98,61 +107,78 @@ ots_status() {
     | _ots_output '%s\n' '.status // .message // "Unknown Error"'
 }
 
-# Share a secret, which is assumed to come in on STDIN.
-#
-# Optional first arg of '[--]private[_key]' returns only metadata_key,
-# otherwise return secret url.
-#
-# All remaining arguments are assumed to be correct of the form
+# Share a secret, which is assumed to come in on STDIN or from ARGS.
+# Arguments *preceeding* optional "--" are assumed to be of the form:
 #   PARAM=VALUE
-# and further are assumed to be supported by the 'share' API form.
-ots_share() {
-  local FMT="$_OTS_URI/secret/%s\n"
-  local JQF='.secret_key'
+# and further are assumed to be supported by the corresponding OTS API.
+ots_share() { ots_url $(ots_metashare "$@"); }
 
-  # if optional first arg is something like -?private(_key)?, ouput private key only.
-  if [[ "${1,,}" == ?(-)?(-)private?(_key) ]]; then
-    _ots_debug sharing w/ private key output only.
-    FMT="%s\n"; JQF='.metadata_key'; shift
+# Share a secret, returning the metadata key for the new secret
+ots_metashare() {
+  # collect API form args
+  local IDX=$(_ots_index -- "$@")
+  local ARGS=$(_ots_join " -F " "" "${@:1:($IDX - 1)}")
+
+  # Add any remaining args to the secret
+  local -a SECRET=("${@:($IDX + 1)}")
+
+  # but if the secret is empty, read from STDIN
+  if [ ${#SECRET[@]} -eq 0 ]; then
+    # read secret from stdin, with prompt if running interactively
+    test -t 0 && echo 'Enter secret; terminate with Ctrl-D:'
+    SECRET=$(cat - /dev/null)
   fi
 
-  local ARGS; ARGS=$(_ots_join " -F " "" "${@}")
-  _ots_curl -X POST $(_ots_auth) ${ARGS} -F secret='<-' "$(_ots_api)/share" \
-    | _ots_output "${FMT}" "${JQF}"
+  _ots_debug "secret:" "${SECRET[@]}"
+  if [ -z "${SECRET}" ]; then
+    echo No secret data given
+  else
+    echo "${SECRET[@]}" \
+      | _ots_curl -X POST $(_ots_auth) ${ARGS} -F secret='<-' "$(_ots_api)/share" \
+      | _ots_output "%s\n" '.metadata_key'
+  fi
 }
 
 # Generate a random secret.
-#
-# Optional first arg of '-privaet[_key]' returns only metadata_key,
-# otherwise return secret url.
-#
-# All remaining arguments are assumed to be correct of the form
+# Arguments *preceeding* optional "--" are assumed to be of the form:
 #   PARAM=VALUE
-# and further are assumed to be supported by the 'generate' API form.
-ots_generate() {
-  local FMT="$_OTS_URI/secret/%s\n"
-  local JQF='.secret_key'
+# and further are assumed to be supported by the corresponding OTS API.
+ots_generate() { ots_url $(ots_metagenerate "$@"); }
 
-  # if optional first arg is something like -?private(_key)?, ouput private key only.
-  if [[ "${1,,}" == ?(-)?(-)private?(_key) ]]; then
-    _ots_debug generating w/ private key output only.
-    FMT="%s\n"; JQF='.metadata_key'; shift
-  fi
+# Generate a secret, returning the metadata key for the new secret
+ots_metagenerate() {
+  # collect API form args
+  local IDX=$(_ots_index -- "$@")
+  local ARGS=$(_ots_join " -F " "" "${@:1:($IDX - 1)}")
 
-  local ARGS; ARGS=$(_ots_join " -F " "" "${@}")
+  # note that we don't use anything after (optional) "--"
   _ots_curl -X POST $(_ots_auth) ${ARGS} "$(_ots_api)/generate" \
-    | _ots_output "${FMT}" "${JQF}"
+    | _ots_output "%s\n" '.metadata_key'
 }
 
-# Retrieve the secret data; Secret key given on the command line.
+# Retrieve the secret; Secret key (or url) given as *LAST* argument.
+# Arguments *preceeding* optional "--" are assumed to be of the form:
+#   PARAM=VALUE
+# and further are assumed to be supported by the corresponding OTS API.
 ots_get() { ots_retrieve "$@"; }
 ots_retrieve() {
+  if [[ $# -lt 1 ]]; then echo "No secret key or URL given"; return; fi
+
+  # last argument assumed to be key (or url)
   local KEY;  KEY="${@: -1}"
   # grab just the key portion, if url looking thing found
   if [[ "$KEY" =~ "$_OTS_URI" ]]; then
     KEY=${KEY##*/}
   fi
-  local ARGS; ARGS=$(_ots_join " -F " "" "${@:1:$(($#-1))}")
+
+  # remove last argument by resetting args to slice without last.
+  set -- "${@:1:$(($#-1))}"
+
+  # collect API form args
+  local IDX=$(_ots_index -- "$@")
+  local ARGS=$(_ots_join " -F " "" "${@:1:($IDX - 1)}")
+
+  # note that we don't use anything after (optional) "--", except last arg (key/url)
   _ots_curl -X POST ${ARGS} $(_ots_api)/secret/$KEY \
     | _ots_output '%s\n' '.value // .message // "Unknown Error"'
 }
@@ -227,17 +253,25 @@ fi
 # ------------------------------------------------------------
 # Running standalone - parse args and do something useful
 
-# Collect form args in an array to pass to the function
+# Collect API form args and remaining args in an array to pass to the function
 FORM=()
-SECRET=()
+ARGS=()
+# only some actions expect or use "--" arg separator
+ARGSEP="--"
+
 while [[ $# -ge 1 ]]; do
   case "$1" in
     # end args processing at '--'
     --)                  shift; break                             ;;
     # meta args
-    -D|--debug)          _OTS_DEBUG='_ots_debug';
+    -D|--debug)          _OTS_DEBUG=
                          _OTS_FMT='debug'               ; shift   ;;
     -H|--help)           echo "need help"               ; exit    ;;
+    # Action
+    share|metashare|generate|metagenerae|get|retrieve)
+                         ACTION="$1"; ARGSEP="--"       ; shift   ;;
+    status|burn|metadata|recent|state|key|url|metaurl)
+                         ACTION="$1"; unset ARGSEP      ; shift   ;;
     # Connection parameter
     -h  |--host)         ots_set_host "$2"              ; shift 2 ;;
     -u  |--user)         ots_set_user "$2"              ; shift 2 ;;
@@ -245,14 +279,11 @@ while [[ $# -ge 1 ]]; do
     # Output format
     -f  |--format)       ots_set_format "$2"            ; shift 2 ;;
     yaml|json|fmt|raw)   ots_set_format "$1"            ; shift   ;;
-    # Action
-    status|share|generate|get|retrieve|burn|metadata|recent|state|key|url|metaurl)
-                         ACTION="$1"                    ; shift   ;;
-    # Secrets are collected in the ARGS
-    -s=*|--secret=*)     SECRET+=("${1#*=}")            ; shift   ;;
-    -s  |--secret)       SECRET+=("$2")                 ; shift 2 ;;
-    secret=*)            SECRET+=("${1#*=}")            ; shift   ;;
-    # Form ARGS, mostly for share, generate, get
+    # Secrets are collected in the ARGS and passed onwards
+    -s=*|--secret=*)     ARGS+=("${1#*=}")              ; shift   ;;
+    -s  |--secret)       ARGS+=("$2")                   ; shift 2 ;;
+    secret=*)            ARGS+=("${1#*=}")              ; shift   ;;
+    # API Form ARGS, currently only for share, generate, get
     -r=*|--recipient=*)  FORM+=("recipient=${1#*=}")    ; shift   ;;
     -r  |--recipient)    FORM+=("recipient=$2")         ; shift 2 ;;
     -p=*|--passphrase=*) FORM+=("passphrase=${1#*=}")   ; shift   ;;
@@ -260,30 +291,13 @@ while [[ $# -ge 1 ]]; do
     -t=*|--ttl=*)        FORM+=("ttl=${1#*=}")          ; shift   ;;
     -t  |--ttl)          FORM+=("ttl=$2")               ; shift 2 ;;
     *=*)                 FORM+=("$1")                   ; shift   ;;
-    # anything else is assumed to be an argument to the function about to be called
+    # anything else we just collect and pass onwards
     *)                   ARGS+=("$1")                   ; shift   ;;
   esac
 done
 
-# Default action is 'share'
-ACTION=${ACTION:-share}
-_ots_debug "action:" "$ACTION"
-
-# Do the action.
-if [[ "${ACTION}" == "share" ]]; then
-  # Add any remaining unprocessed args to the secret
-  SECRET+=("$@")
-  if [ ${#SECRET[@]} -eq 0 ]; then
-    # read secret from stdin, with prompt if running interactively
-    test -t 0 && echo 'Enter secret; terminate with Ctrl-D:'
-    SECRET=$(cat -)
-  fi
-  #echo "${SECRET[@]}"
-  _ots_debug "secret:" "${SECRET[@]}"
-  echo "${SECRET[@]}" | ots_share "${ARGS[@]}" "${FORM[@]}"
-else
-  ots_$ACTION "${FORM[@]}" "${ARGS[@]}" "$@"
-fi
+# Default action is 'share'; execute the action
+ots_${ACTION:-share} "${FORM[@]}" $ARGSEP "${ARGS[@]}" "$@"
 
 exit
 
