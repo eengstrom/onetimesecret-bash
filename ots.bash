@@ -23,13 +23,12 @@ _OTS_URI="https://onetimesecret.com"
 _OTS_URN="api/v1"
 _OTS_FMT="fmt"     # "fmt|printf", "yaml", "json" or anything else == raw
 
-# DEBUGGING
-#_OTS_DEBUG='_ots_debug'
-#_OTS_FMT='debug'
-
 # ------------------------------------------------------------
-# Internal only functions
+# Internal only functions;
+# NOT part of the API, and subject to change.
 
+# turn debugging on
+_ots_set_debug()  { _OTS_DEBUG='_ots_debug'; _OTS_FMT='debug'; }
 # Simple debug, but write output propery quoted
 _ots_debug() { test -n "$_OTS_DEBUG" && (printf "%q " "$@"; printf "\n") 1>&2; }
 
@@ -42,9 +41,9 @@ _ots_join() { local d="$1"; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}";
 
 # given a split value and an array of values, return index of split value
 _ots_index() {
-  split="$1"; shift
+  local split="$1"; shift
   for ((i=1;i<=$#;++i)); do
-    [[ "${@:$i:1}" == "--" ]] && break
+    [[ "${@:$i:1}" == "$split" ]] && break
   done
   echo $i
 }
@@ -65,9 +64,7 @@ _ots_auth() {
 # Validate args; warn and return error if not valid.
 _ots_validate_args() {
   local CHECK="$1"; shift
-  # Ensure we have an argument to use.
-  # Should be more thorough, but I don't know the
-
+  # Should be more thorough, this is really just a number check.
   if [[ $# -lt 1 ]]; then
     echo "No $CHECK key given" 1>&2
     return 1
@@ -90,19 +87,6 @@ _ots_output() {
     raw|*)      cat - ;;
   esac
 }
-
-# parse JSON and put into '_ots_result' associative array
-# idea from: http://stackoverflow.com/questions/26717277/converting-a-json-array-to-a-bash-array
-#declare -A _ots_result
-#_ots_parse_json() {
-#  while IFS="=" read -r key value; do
-#    _ots_result[$key]="$value"
-#  done < <(jq -r "to_entries|map(\"\(.key)=\(.value)\")|.[]" -)
-#
-#  for key in "${!_ots_result[@]}"; do
-#    echo "parse: $key = ${_ots_result[$key]}"
-#  done
-#}
 
 # ------------------------------------------------------------
 # Exepcted entry-point functions - API and others
@@ -261,6 +245,7 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]] ; then
   # parse some arguments for configuration
   while [[ $# -ge 1 ]]; do
     case "$1" in
+      -D  |--debug)      _ots_set_debug                  ; shift   ;;
       -h  |--host)       ots_set_host "$2"               ; shift 2 ;;
       -u  |--user)       ots_set_user "$2"               ; shift 2 ;;
       -k  |--key)        ots_set_key "$2"                ; shift 2 ;;
@@ -279,22 +264,18 @@ fi
 # Collect API form args and remaining args in an array to pass to the function
 FORM=()
 ARGS=()
-# only some actions expect or use "--" arg separator
-ARGSEP="--"
 
 while [[ $# -ge 1 ]]; do
   case "$1" in
     # end args processing at '--'
     --)                  shift; break                             ;;
     # meta args
-    -D|--debug)          _OTS_DEBUG=
-                         _OTS_FMT='debug'               ; shift   ;;
-    -H|--help)           echo "need help"               ; exit    ;;
+    -D|--debug)          _ots_set_debug                 ; shift   ;;
+    -H|--help)           echo "need help/usage"         ; exit    ;;
     # Action
-    share|metashare|generate|metagenerae|get|retrieve)
-                         ACTION="$1"; ARGSEP="--"       ; shift   ;;
-    status|burn|metadata|recent|state|key|url|metaurl)
-                         ACTION="$1"; unset ARGSEP      ; shift   ;;
+    share|metashare|generate|metagenerae|get|retrieve \
+      |state|burn|metadata|key|url|metaurl \
+      |status|recent)    ACTION="$1"                    ; shift   ;;
     # Connection parameter
     -h  |--host)         ots_set_host "$2"              ; shift 2 ;;
     -u  |--user)         ots_set_user "$2"              ; shift 2 ;;
@@ -306,7 +287,7 @@ while [[ $# -ge 1 ]]; do
     -s=*|--secret=*)     ARGS+=("${1#*=}")              ; shift   ;;
     -s  |--secret)       ARGS+=("$2")                   ; shift 2 ;;
     secret=*)            ARGS+=("${1#*=}")              ; shift   ;;
-    # API Form ARGS, currently only for share, generate, get
+    # API Form ARGS, really only used by share, generate, get
     -r=*|--recipient=*)  FORM+=("recipient=${1#*=}")    ; shift   ;;
     -r  |--recipient)    FORM+=("recipient=$2")         ; shift 2 ;;
     -p=*|--passphrase=*) FORM+=("passphrase=${1#*=}")   ; shift   ;;
@@ -320,7 +301,7 @@ while [[ $# -ge 1 ]]; do
 done
 
 # Default action is 'share'; execute the action
-ots_${ACTION:-share} "${FORM[@]}" $ARGSEP "${ARGS[@]}" "$@"
+ots_${ACTION:-share} "${FORM[@]}" ${FORM:+"--"} "${ARGS[@]}" "$@"
 
 exit
 
