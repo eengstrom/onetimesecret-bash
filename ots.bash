@@ -199,7 +199,7 @@ ots_metadata() {
 ots_recent() {
   if [ -z "$(_ots_auth)" ]; then
     echo "Authentication Required" 1>&2
-    return
+    return 1
   fi
 
   _ots_curl -X GET $(_ots_auth) $(_ots_api)/private/recent \
