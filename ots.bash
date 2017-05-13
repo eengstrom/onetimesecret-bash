@@ -237,72 +237,56 @@ ots_metadata_url() {
 }
 
 # ------------------------------------------------------------
-# Check if we are being sourced only for our functions
+# main - parse args; execute action if not being sourced
+_ots_main() {
+  local ACTION="share"  # default is share
+  local -a FORM=()
+  local -a ARGS=()
 
-# If this is being sourced by some other script, parse config options and return.
-# idea: http://stackoverflow.com/questions/2683279/how-to-detect-if-a-script-is-being-sourced
-if [[ "${BASH_SOURCE[0]}" != "${0}" ]] ; then
-  # parse some arguments for configuration
   while [[ $# -ge 1 ]]; do
     case "$1" in
-      -D  |--debug)      _ots_set_debug                  ; shift   ;;
-      -h  |--host)       ots_set_host "$2"               ; shift 2 ;;
-      -u  |--user)       ots_set_user "$2"               ; shift 2 ;;
-      -k  |--key)        ots_set_key "$2"                ; shift 2 ;;
-      -f  |--format)     ots_set_format "$2"             ; shift 2 ;;
-      *)                 echo "unknown option '$1'" 1>&2 ; shift   ;;
+      # end args processing at '--'
+      --)                  shift; break                             ;;
+      # meta args
+      -D|--debug)          _ots_set_debug                 ; shift   ;;
+      -H|--help)           echo "need help/usage"         ; exit    ;;
+      # Action
+      share|metashare|generate|metagenerae|get|retrieve \
+        |state|burn|metadata|key|url|metaurl \
+        |status|recent)    ACTION="$1"                    ; shift   ;;
+      # Connection parameter
+      -h  |--host)         ots_set_host "$2"              ; shift 2 ;;
+      -u  |--user)         ots_set_user "$2"              ; shift 2 ;;
+      -k  |--key)          ots_set_key "$2"               ; shift 2 ;;
+      # Output format
+      -f  |--format)       ots_set_format "$2"            ; shift 2 ;;
+      yaml|json|fmt|raw)   ots_set_format "$1"            ; shift   ;;
+      # Secrets are collected in the ARGS and passed onwards
+      -s=*|--secret=*)     ARGS+=("${1#*=}")              ; shift   ;;
+      -s  |--secret)       ARGS+=("$2")                   ; shift 2 ;;
+      secret=*)            ARGS+=("${1#*=}")              ; shift   ;;
+      # API Form ARGS, really only used by share, generate, get
+      -r=*|--recipient=*)  FORM+=("recipient=${1#*=}")    ; shift   ;;
+      -r  |--recipient)    FORM+=("recipient=$2")         ; shift 2 ;;
+      -p=*|--passphrase=*) FORM+=("passphrase=${1#*=}")   ; shift   ;;
+      -p  |--passphrase)   FORM+=("passphrase=$2")        ; shift 2 ;;
+      -t=*|--ttl=*)        FORM+=("ttl=${1#*=}")          ; shift   ;;
+      -t  |--ttl)          FORM+=("ttl=$2")               ; shift 2 ;;
+      *=*)                 FORM+=("$1")                   ; shift   ;;
+      # anything else we just collect and pass onwards
+      *)                   ARGS+=("$1")                   ; shift   ;;
     esac
   done
 
-  # but don't do anything else
-  return
-fi
+  # If this is being sourced by some other script, parse config options and return.
+  # idea: http://stackoverflow.com/questions/2683279/how-to-detect-if-a-script-is-being-sourced
+  [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return
 
-# ------------------------------------------------------------
-# Running standalone - parse args and do something useful
+  # Default action is 'share'; execute the action
+  ots_${ACTION:-share} "${FORM[@]}" ${FORM:+"--"} "${ARGS[@]}" "$@"
+}
 
-# Collect API form args and remaining args in an array to pass to the function
-FORM=()
-ARGS=()
-
-while [[ $# -ge 1 ]]; do
-  case "$1" in
-    # end args processing at '--'
-    --)                  shift; break                             ;;
-    # meta args
-    -D|--debug)          _ots_set_debug                 ; shift   ;;
-    -H|--help)           echo "need help/usage"         ; exit    ;;
-    # Action
-    share|metashare|generate|metagenerae|get|retrieve \
-      |state|burn|metadata|key|url|metaurl \
-      |status|recent)    ACTION="$1"                    ; shift   ;;
-    # Connection parameter
-    -h  |--host)         ots_set_host "$2"              ; shift 2 ;;
-    -u  |--user)         ots_set_user "$2"              ; shift 2 ;;
-    -k  |--key)          ots_set_key "$2"               ; shift 2 ;;
-    # Output format
-    -f  |--format)       ots_set_format "$2"            ; shift 2 ;;
-    yaml|json|fmt|raw)   ots_set_format "$1"            ; shift   ;;
-    # Secrets are collected in the ARGS and passed onwards
-    -s=*|--secret=*)     ARGS+=("${1#*=}")              ; shift   ;;
-    -s  |--secret)       ARGS+=("$2")                   ; shift 2 ;;
-    secret=*)            ARGS+=("${1#*=}")              ; shift   ;;
-    # API Form ARGS, really only used by share, generate, get
-    -r=*|--recipient=*)  FORM+=("recipient=${1#*=}")    ; shift   ;;
-    -r  |--recipient)    FORM+=("recipient=$2")         ; shift 2 ;;
-    -p=*|--passphrase=*) FORM+=("passphrase=${1#*=}")   ; shift   ;;
-    -p  |--passphrase)   FORM+=("passphrase=$2")        ; shift 2 ;;
-    -t=*|--ttl=*)        FORM+=("ttl=${1#*=}")          ; shift   ;;
-    -t  |--ttl)          FORM+=("ttl=$2")               ; shift 2 ;;
-    *=*)                 FORM+=("$1")                   ; shift   ;;
-    # anything else we just collect and pass onwards
-    *)                   ARGS+=("$1")                   ; shift   ;;
-  esac
-done
-
-# Default action is 'share'; execute the action
-ots_${ACTION:-share} "${FORM[@]}" ${FORM:+"--"} "${ARGS[@]}" "$@"
-
-exit
+#----------------------------------------
+_ots_main "$@"
 
 # eof
