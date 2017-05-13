@@ -121,13 +121,14 @@ ots_metashare() {
   # but if the secret is empty, read from STDIN
   if [ ${#SECRET[@]} -eq 0 ]; then
     # read secret from stdin, with prompt if running interactively
-    test -t 0 && echo 'Enter secret; terminate with Ctrl-D:'
+    test -t 0 && echo 'Enter secret; terminate with Ctrl-D:' 1>&2
     SECRET=$(cat - /dev/null)
   fi
 
   _ots_debug "secret:" "${SECRET[@]}"
   if [ -z "${SECRET}" ]; then
-    echo No secret data given
+    echo No secret data given 1>&2
+    return 1
   else
     echo "${SECRET[@]}" \
       | _ots_curl -X POST $(_ots_auth) ${ARGS} -F secret='<-' "$(_ots_api)/share" \
@@ -158,7 +159,7 @@ ots_metagenerate() {
 # and further are assumed to be supported by the corresponding OTS API.
 ots_get() { ots_retrieve "$@"; }
 ots_retrieve() {
-  _ots_validate_args "URL or secret" "$@" || return 1
+  _ots_validate_args "URL or secret" "$@" || return $?
 
   # last argument assumed to be key (or url)
   local KEY;  KEY="${@: -1}"
@@ -181,7 +182,7 @@ ots_retrieve() {
 
 # burn a secret, given the metadata key
 ots_burn() {
-  _ots_validate_args "metadata" "$@" || return 1
+  _ots_validate_args "metadata" "$@" || return $?
 
   # This call is odd, as it returns a hierarchical JSON response.
   _ots_curl -X POST $(_ots_auth) $(_ots_metaapi "$1")/burn \
@@ -190,7 +191,7 @@ ots_burn() {
 
 # retrieve the metadata for a secret
 ots_metadata() {
-  _ots_validate_args "metadata" "$@" || return 1
+  _ots_validate_args "metadata" "$@" || return $?
   _ots_curl -X POST $(_ots_metaapi "$1") \
     | _ots_output '%s\n' '.message // .'
 }
@@ -208,7 +209,7 @@ ots_recent() {
 
 # check on state of a secret, given the metadata key
 ots_state() {
-  _ots_validate_args "metadata" "$@" || return 1
+  _ots_validate_args "metadata" "$@" || return $?
   _ots_curl -X POST $(_ots_metaapi "$1") \
     | _ots_output '%s\n' '.state // .message // "unknown"'
 }
@@ -216,7 +217,7 @@ ots_state() {
 # get the secret key for a secret, given the metadata key
 ots_key() { ots_secret_key "$@"; }
 ots_secret_key() {
-  _ots_validate_args "metadata" "$@" || return 1
+  _ots_validate_args "metadata" "$@" || return $?
   _ots_curl -X POST $(_ots_metaapi "$1") \
     | _ots_output FMT "%s\n" '.secret_key'
     # Note forced output to format (FMT) via printf.
@@ -225,14 +226,14 @@ ots_secret_key() {
 # Get the (user-friendly) secret url for a secret, given the metadata key
 ots_url() { ots_secret_url "$@"; }
 ots_secret_url() {
-  _ots_validate_args "metadata" "$@" || return 1
+  _ots_validate_args "metadata" "$@" || return $?
   printf "$_OTS_URI/secret/%s\n" $(ots_key "$1")
 }
 
 # Get the (user-friendly) metadata url for a secret, given the metadata key
 ots_metaurl() { ots_metadata_url "$@"; }
 ots_metadata_url() {
-  _ots_validate_args "metadata" "$@" || return 1
+  _ots_validate_args "metadata" "$@" || return $?
   printf "$_OTS_URI/private/%s\n" "$1"
 }
 
