@@ -4,9 +4,9 @@
 # API Docs: https://onetimesecret.com/docs/api/secrets
 #
 # Requires:
-# - bash 4.x -- for associative arrays
-# - curl     -- for accessing the OTS API
-# - jq       -- for parsing json and formatting output
+# - bash 4.x -- for associative arrays and perhaps other features.
+# - curl     -- for accessing the OTS API.
+# - jq       -- for parsing json and formatting output.
 #
 # Author: Eric Engstrom (eric.engstrom(-AT-)g.m.a.i.l(-DOT-)c o m)
 # See README.md and LICENSE.
@@ -240,7 +240,7 @@ ots_metadata_url() {
 # ------------------------------------------------------------
 # main - parse args; execute action if not being sourced
 _ots_main() {
-  local ACTION="share"  # default is share
+  local ACTION="share"
   local -a FORM=()
   local -a ARGS=()
 
@@ -252,9 +252,12 @@ _ots_main() {
       -D|--debug)          _ots_set_debug                 ; shift   ;;
       -H|--help)           echo "need help/usage"         ; exit    ;;
       # Action
-      share|metashare|generate|metagenerae|get|retrieve \
-        |state|burn|metadata|key|url|metaurl \
-        |status|recent)    ACTION="$1"                    ; shift   ;;
+      share|metashare|generate|metagenerate|get|retrieve)
+        ACTION="$1";
+        # always prefix passed args with "--"
+        ARGS=("--" "${ARGS[@]}")			  ; shift   ;;
+      state|burn|metadata|key|url|metaurl|status|recent)
+        ACTION="$1"                                       ; shift   ;;
       # Connection parameter
       -h  |--host)         ots_set_host "$2"              ; shift 2 ;;
       -u  |--user)         ots_set_user "$2"              ; shift 2 ;;
@@ -284,7 +287,7 @@ _ots_main() {
   [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return
 
   # Default action is 'share'; execute the action
-  ots_${ACTION:-share} "${FORM[@]}" ${FORM:+"--"} "${ARGS[@]}" "$@"
+  ots_${ACTION:-share} "${FORM[@]}" "${ARGS[@]}" "$@"
 }
 
 #----------------------------------------

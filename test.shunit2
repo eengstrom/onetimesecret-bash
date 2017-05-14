@@ -19,76 +19,100 @@ oneTimeSetUp() {
   #ots_set_user "USERNAME"
   #ots_set_key  "APIKEY"
 
+  # turn on debugging, which makes most test fail, of course
+  #ots_set_debug
+
   # Generate a random string to reuse for a secret
   SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
 }
 
-
-XtestJoin() {
-  assertNull                  "$(_ots_join \& )"
-  assertEquals 'foo' 	      "$(_ots_join \& foo )"
-  assertEquals 'foo&bar&baz'  "$(_ots_join \& foo bar baz)"
+testJQ() {
+  local JQIN='{
+  "foo": "bar"
+}'
+  assertEquals "JQ parse 1"    "$JQIN" "$(jq '.' <<<"$JQIN")"
+  assertEquals "JQ parse 2"    '"bar"' "$(jq '.foo' <<<"$JQIN")"
+  assertEquals "JQ parse 3"    '"moo"' "$(jq '.xxx // "moo"' <<<"$JQIN")"
+  assertEquals "JQ parse fail" 'null'  "$(jq '.xxx' <<<'{ "foo": "bar" }')"
 }
 
-XtestJQ() {
-  (jq '.' <<<'{ "foo": "bar" }') > /dev/null 2>&1 \
-    || fail "JQ parse error"
-  (jq '.bar // ' <<<'{ "foo": "bar" }') > /dev/null 2>&1 \
-    || fail "JQ parse error"
+testJoin() {
+  assertNull                        "$(_ots_join \& )"
+  assertEquals 'foo' 	            "$(_ots_join \& foo )"
+  assertEquals 'foo&bar&baz'        "$(_ots_join \& foo bar baz)"
+  assertEquals 'foo -- bar -- baz'  "$(_ots_join ' -- ' foo bar baz)"
 }
 
-XtestStatus() {
+
+testValidateArgs() {
+  assertFalse "No args get()"  $(ots_get 2>/dev/null)
+  assertFalse "No args burn()" $(ots_burn 2>/dev/null)
+}
+
+testStatus() {
   assertEquals $(ots_status) "nominal"
   assertEquals $(./ots status) "nominal"
 }
 
-urlkey() { echo "$1" | awk -F / '{print $NF}'; }
-shareAndGet() {
-  local URL=$("$@")
-  local KEY=$(urlkey $URL)
-  ots_get $KEY
+testCommandLineSecrets() {
+  local URL=$(./ots share \
+                    -s "secret-s string" \
+                    -s="secret -s=string" \
+                    secret="secret=string" \
+                    "no-arg string" \
+                    -- \
+                    Remaining args are part of the secret too)
+  assertTrue "Command line secret created" $?
+
+  assertEquals "Command line secret retrieved" \
+               "$(_ots_join " " \
+                          "secret-s string" \
+                          "secret -s=string" \
+                          "secret=string" \
+                          "no-arg string" \
+                          Remaining args are part of the secret too)" \
+               "$(./ots get "$URL")"
 }
 
-XtestShareAndGet() {
-  assertEquals "Single Secret" "$SECRET" \
-               "$(shareAndGet ./ots share -s "$SECRET")"
+testSTDINSecrets() {
+  local URL=$(echo "$SECRET" \
+                | ./ots share)
+  assertTrue "SDTIN secret created" $?
+  assertEquals "STDIN secret retrieved" \
+               "$SECRET" \
+               "$(ots_get "$URL")"
 
-  assertEquals "Two Part Secret" "$SECRET PART 2" \
-               "$(shareAndGet ./ots share -s "$SECRET" --secret="PART 2")"
-
-  assertEquals "MultiLine Secret" "$SECRET
-On Multiple Lines"  \
-               "$(shareAndGet ./ots share -s "$SECRET
-On Multiple Lines")"
-
-  assertEquals "Extra Args Secret"  "$SECRET" \
-               "$(shareAndGet ./ots share -- "$SECRET")"
-
-  assertEquals "STDIN Secret"     "$SECRET" \
-               "$(echo "$SECRET" | shareAndGet ./ots share)"
-
-  assertEquals "STDIN Multiline"  "$SECRET
+  # not really different, just for example
+  local URL=$(ots_share <<-EOF
+	$SECRET
+	$SECRET
+	EOF
+        )
+  assertTrue "HEREDOC SDTIN secret created" $?
+  assertEquals "HEREDOC STDIN secret retrieved" \
+               "$SECRET
 $SECRET" \
-               "$(shareAndGet ./ots share <<EOF
-$SECRET
-$SECRET
-EOF
-)"
-
+               "$(ots_get "$URL")"
 }
 
-XtestGetWithURLs() {
+testGetWithURLsOrKey() {
   local URL=$(ots_share <<< "$SECRET")
-
-  assertEquals "Fetch Secret with URL" "$SECRET" \
+  assertEquals "Fetch Secret with URL" \
+               "$SECRET" \
                "$(ots_retrieve "$URL")"
+
+  local URL=$(ots_share <<< "$SECRET")
+  local KEY="${URL##*/}"
+  assertEquals "Fetch Secret with KEY" \
+               "$SECRET" \
+               "$(ots_retrieve "$KEY")"
 }
 
+testShareAndBurn() {
+  local KEY=$(./ots metashare <<< "$SECRET")
 
-XtestShareAndBurn() {
-  local KEY=$(./ots share --private <<< "$SECRET")
-
-  assertNotNull "State generated; non null" "$KEY"
+  assertTrue    "Secret created" $?
+  assertNotNull "Secret created; non null" "$KEY"
 
   assertEquals "State Secret: 'new'" 'new' \
                "$(ots_state "$KEY")"
@@ -110,10 +134,11 @@ XtestShareAndBurn() {
 }
 
 
-XtestGenerate() {
-  local KEY=$(./ots generate --private <<< "$SECRET")
+testGenerate() {
+  local KEY=$(ots_metagenerate <<< "$SECRET")
 
-  assertNotNull "State generated; non null" "$KEY"
+  assertTrue    "Secret generated" $?
+  assertNotNull "Secret generated; non null" "$KEY"
 
   # For some reason, generated secrets are "immediately" viewed.
   # assertEquals "State Secret: 'new'" 'new' \
@@ -130,22 +155,20 @@ XtestGenerate() {
 
 }
 
-XtestMetadata() {
-  local METAKEY=$(./ots share --private <<< "$SECRET")
+testMetadata() {
+  local METAKEY=$(ots_metashare <<< "$SECRET")
 
-  assertNotNull "State generated; non null" "$METAKEY"
+  assertTrue    "Secret generated" $?
+  assertNotNull "Secret generated; non null" "$METAKEY"
 
   local DATA=$(ots_metadata "$METAKEY")
   assertNotNull "Empty Metadata?" "$DATA"
 
-  (jq "." <<< "$DATA") >/dev/null 2>&1 \
-    || fail "invalid JSON ouptut?"
-
-  assertNotEquals "Metadata State has key'" 'null' \
-                  $(jq ".metadata_key" <<< "$DATA")
+  assertEquals "Metadata key matches'" "\"$METAKEY\"" \
+               "$(jq ".metadata_key" <<< "$DATA")"
 
   assertEquals "Metadata State: 'new'" '"new"' \
-               $(jq ".state" <<< "$DATA")
+               "$(jq ".state" <<< "$DATA")"
 
   # Now get the secret key, given the metadata key
   local KEY=$(ots_key $METAKEY)
@@ -166,10 +189,12 @@ XtestMetadata() {
                $(ots_state "$METAKEY")
 }
 
-XtestRecent() {
+testRecent() {
   # unauthenticated should fail
-  assertEquals "Unauth recent() call" 'Authentication Required' \
+  assertEquals "Unauth recent() call" \
+               'Authentication Required' \
                "$(ots_recent 2>&1)"
+  #assertFalse "Recent() call failed" $?
 
   # remaining tests require credentials
   if [ \! -e ".ots.creds" ]; then
@@ -189,7 +214,7 @@ XtestRecent() {
   ots_set_key  "$APIKEY"
 
   # Create a new secret.
-  local METAKEY=$(ots_share --private <<< "$SECRET")
+  local METAKEY=$(ots_metashare <<< "$SECRET")
   local FIRST=$(ots_recent | head -1)
 
   # check that they are the same
@@ -211,16 +236,39 @@ XtestRecent() {
   ots_set_key  ""
 
   # unauthenticated should fail, again
-  assertEquals "Unauth recent() call" 'Authentication Required' \
+  assertEquals "Unauth recent() call 2" \
+               'Authentication Required' \
                "$(ots_recent 2>&1)"
+  #assertFalse "Recent() call failed 2" $?
 }
 
+testEncryptedSecrets() {
+  local TTL=56789
+  local PASSPHRASE=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
 
-XtestEncryptedSecrets() {
-  fail "need to test encrypted secrets"
+  local MKEY=$(ots_metashare passphrase="$PASSPHRASE" ttl=$TTL -- "$SECRET")
+  local META=$(ots_metadata "$MKEY")
+
+  assertEquals "Metadata shows passphrase required" \
+               "true" \
+               "$(jq ".passphrase_required" <<<"$META")"
+
+  assertEquals "Metadata TTL set properly" \
+               $TTL \
+               "$(jq ".ttl" <<<"$META")"
+
+  local SKEY=$(ots_key "$MKEY")
+  assertEquals "Get encrypted secret with passphrase" \
+               "$SECRET" \
+               "$(ots_get passphrase="$PASSPHRASE" -- "$SKEY")"
+
 }
 
-
+#testSecretRecipients() {
+#  fail "need to write 'share --recipient' tests"
+#}
 
 # load shunit2 - assumes (symlink) in current directory
 source shunit2
+
+# EOF
