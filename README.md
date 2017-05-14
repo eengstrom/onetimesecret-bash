@@ -88,8 +88,13 @@ all of which begin `ots_`, as in:
     # fetch the secret data
     local DATA="$(ots_retrieve "$URL")"
 
-    # generate a new secret, and get back the private metadata key
-    local KEY=$(ots_generate --private)
+    # share/generate a new secret, and get back the private metadata key
+    local KEY=$(ots_metashare <<< "SECRET")
+    local KEY=$(ots_metagenerate)
+
+    # get a list of private metadata keys recently created.
+    # note that this requires valid autnentication credentials
+    local -a RECENT=( $(ots_recent) )
 
     # check on the current state of a secret, given the private key
     ots_state $KEY
