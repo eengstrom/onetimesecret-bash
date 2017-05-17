@@ -6,7 +6,7 @@
 
 oneTimeSetUp() {
   # source for use anonymously (secrets created anonymously)
-  source ots.bash
+  source ots.bash --anonymously
 
   # source with specific auth credentials
   APIUSER="USERNAME"

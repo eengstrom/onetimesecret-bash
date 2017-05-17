@@ -21,7 +21,8 @@ fi
 # Defaults
 _OTS_URI="https://onetimesecret.com"
 _OTS_URN="api/v1"
-_OTS_FMT="fmt"     # "fmt|printf", "yaml", "json" or anything else == raw
+_OTS_FMT="fmt"          # "fmt|printf", "yaml", "json" or anything else == raw
+_OTS_CFG="$HOME/.ots"
 
 # ------------------------------------------------------------
 # Internal only functions;
@@ -96,6 +97,7 @@ ots_set_host()   { _OTS_URI="$1"; }
 ots_set_user()   { _OTS_UID="$1"; }
 ots_set_key()    { _OTS_KEY="$1"; }
 ots_set_format() { _OTS_FMT="$1"; }
+ots_set_config() { _OTS_CFG="$1"; }
 
 # check on status of OTS server
 ots_status() {
@@ -185,6 +187,7 @@ ots_burn() {
   _ots_validate_args "metadata" "$@" || return $?
 
   # This call is odd, as it returns a hierarchical JSON response.
+  # see https://github.com/onetimesecret/onetimesecret/issues/59#issuecomment-301959518
   _ots_curl -X POST $(_ots_auth) $(_ots_metaapi "$1")/burn \
     | _ots_output '%s\n' '.state.state // .message // "Unknown Error"'
 }
@@ -262,6 +265,8 @@ _ots_main() {
       -h  |--host)         ots_set_host "$2"              ; shift 2 ;;
       -u  |--user)         ots_set_user "$2"              ; shift 2 ;;
       -k  |--key)          ots_set_key "$2"               ; shift 2 ;;
+      -a  |--anon*)        unset _OTS_CFG                 ; shift   ;;
+      -c  |--conf*)        ots_set_config "$2"            ; shift 2 ;;
       # Output format
       -f  |--format)       ots_set_format "$2"            ; shift 2 ;;
       yaml|json|fmt|raw)   ots_set_format "$1"            ; shift   ;;
@@ -285,6 +290,12 @@ _ots_main() {
   # If this is being sourced by some other script, parse config options and return.
   # idea: http://stackoverflow.com/questions/2683279/how-to-detect-if-a-script-is-being-sourced
   [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return
+
+  # IF running interactively, and config file exists, source it.
+  # allows you to specify anything, but notably credentials for OTS to use
+  if [ -n "${_OTS_CFG}" -a -r "${_OTS_CFG}" ]; then
+    source "${_OTS_CFG}"
+  fi
 
   # Default action is 'share'; execute the action
   ots_${ACTION:-share} "${FORM[@]}" "${ARGS[@]}" "$@"
