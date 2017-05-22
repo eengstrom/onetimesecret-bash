@@ -75,10 +75,11 @@ all of which begin `ots_`, as in:
     local URL=$(echo "secret" | ots_share)
 
     # share a multi line secret via HEREDOC.
-    URL=ots_share <<-EOF
+    URL=$(ots_share <<-EOF
     	This is a Secret
         ... on multiple lines
     EOF
+    )
 
     # pass options to share or generate.
     URL=$(ots_share ttl=600 \
