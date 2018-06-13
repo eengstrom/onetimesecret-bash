@@ -34,6 +34,8 @@ testJQ() {
   assertEquals "JQ parse 2"    '"bar"' "$(jq '.foo' <<<"$JQIN")"
   assertEquals "JQ parse 3"    '"moo"' "$(jq '.xxx // "moo"' <<<"$JQIN")"
   assertEquals "JQ parse fail" 'null'  "$(jq '.xxx' <<<'{ "foo": "bar" }')"
+
+  return 0
 }
 
 testJoin() {
@@ -41,17 +43,23 @@ testJoin() {
   assertEquals 'foo' 	            "$(_ots_join \& foo )"
   assertEquals 'foo&bar&baz'        "$(_ots_join \& foo bar baz)"
   assertEquals 'foo -- bar -- baz'  "$(_ots_join ' -- ' foo bar baz)"
+
+  return 0
 }
 
 
 testValidateArgs() {
   assertFalse "No args get()"  $(ots_get 2>/dev/null)
   assertFalse "No args burn()" $(ots_burn 2>/dev/null)
+
+  return 0
 }
 
 testStatus() {
   assertEquals $(ots_status) "nominal"
   assertEquals $(./ots status) "nominal"
+
+  return 0
 }
 
 testCommandLineSecrets() {
@@ -72,6 +80,8 @@ testCommandLineSecrets() {
                           "no-arg string" \
                           Remaining args are part of the secret too)" \
                "$(./ots get "$URL")"
+
+  return 0
 }
 
 testSTDINSecrets() {
@@ -93,6 +103,8 @@ testSTDINSecrets() {
                "$SECRET
 $SECRET" \
                "$(ots_get "$URL")"
+
+  return 0
 }
 
 testGetWithURLsOrKey() {
@@ -106,6 +118,8 @@ testGetWithURLsOrKey() {
   assertEquals "Fetch Secret with KEY" \
                "$SECRET" \
                "$(ots_retrieve "$KEY")"
+
+  return 0
 }
 
 testShareAndBurn() {
@@ -131,6 +145,8 @@ testShareAndBurn() {
 
   assertEquals "Try get burned secret." 'Unknown secret' \
                "$(ots_get "$KEY")"
+
+  return 0
 }
 
 
@@ -153,6 +169,7 @@ testGenerate() {
   assertEquals "State Secret: 'burned'" 'burned' \
                "$(ots_state "$KEY")"
 
+  return 0
 }
 
 testMetadata() {
@@ -187,6 +204,8 @@ testMetadata() {
 
   assertEquals "Secret State: 'received'" 'received' \
                $(ots_state "$METAKEY")
+
+  return 0
 }
 
 testRecent() {
@@ -240,28 +259,59 @@ testRecent() {
                'Authentication Required' \
                "$(ots_recent 2>&1)"
   #assertFalse "Recent() call failed 2" $?
+
+  return 0
 }
 
-testEncryptedSecrets() {
+testMetadataTTL() {
   local TTL=56789
+  local TTLx2=$(( $TTL * 2 ))
+  local TTL_4W=$(( 60 * 60 * 24 * 28 ))
+  local TTL_2W=$(( 60 * 60 * 24 * 14 ))
+  local TTL_1W=$(( 60 * 60 * 24 * 07 ))
+
+  # Default and Max TTLs
+  #          TTL   metadata_TTL  secret_TTL
+  #   auth   4W      4W            2W
+  #   anon   2W      2W            1W
+  
+  local MKEY=$(ots_metashare ttl=$TTL -- "$SECRET")
+  local META=$(ots_metadata "$MKEY")
+
+  assertEquals "TTL set properly" \
+               "$TTLx2" \
+               "$(jq ".ttl" <<<"$META")"
+
+  local metaTTL=$(jq ".metadata_ttl" <<<"$META")
+  local delta=$(( $TTLx2 - $metaTTL ))
+  [[ $delta -gt 0 ]] && [[ $delta -lt 10 ]]
+  assertTrue "Metadata TTL set properly" "$?"
+
+  local secretTTL=$(jq ".secret_ttl" <<<"$META")
+  local delta=$(( $TTL - $secretTTL ))
+  [[ $delta -gt 0 ]] && [[ $delta -lt 10 ]]
+  assertTrue "Secret TTL set properly" "$?"
+
+  return 0
+}
+
+
+testEncryptedSecrets() {
   local PASSPHRASE=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
 
-  local MKEY=$(ots_metashare passphrase="$PASSPHRASE" ttl=$TTL -- "$SECRET")
+  local MKEY=$(ots_metashare passphrase="$PASSPHRASE" -- "$SECRET")
   local META=$(ots_metadata "$MKEY")
 
   assertEquals "Metadata shows passphrase required" \
                "true" \
                "$(jq ".passphrase_required" <<<"$META")"
 
-  assertEquals "Metadata TTL set properly" \
-               $TTL \
-               "$(jq ".ttl" <<<"$META")"
-
   local SKEY=$(ots_key "$MKEY")
   assertEquals "Get encrypted secret with passphrase" \
                "$SECRET" \
                "$(ots_get passphrase="$PASSPHRASE" -- "$SKEY")"
 
+  return 0
 }
 
 #testSecretRecipients() {
@@ -269,6 +319,6 @@ testEncryptedSecrets() {
 #}
 
 # load shunit2 - assumes (symlink) in current directory
-source shunit2
+source ./shunit2
 
 # EOF
