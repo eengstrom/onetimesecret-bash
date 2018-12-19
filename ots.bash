@@ -97,7 +97,7 @@ ots_set_host()   { _OTS_URI="$1"; }
 ots_set_user()   { _OTS_UID="$1"; }
 ots_set_key()    { _OTS_KEY="$1"; }
 ots_set_format() { _OTS_FMT="$1"; }
-ots_set_config() { _OTS_CFG="$1"; }
+ots_set_config() { echo "$1"; _OTS_CFG="$1"; }
 
 # check on status of OTS server
 ots_status() {
@@ -287,15 +287,15 @@ _ots_main() {
     esac
   done
 
-  # If this is being sourced by some other script, parse config options and return.
-  # idea: http://stackoverflow.com/questions/2683279/how-to-detect-if-a-script-is-being-sourced
-  [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return
-
-  # IF running interactively, and config file exists, source it.
+  # IF config file exists, source it.
   # allows you to specify anything, but notably credentials for OTS to use
   if [ -n "${_OTS_CFG}" -a -r "${_OTS_CFG}" ]; then
     source "${_OTS_CFG}"
   fi
+
+  # If this is being sourced by some other script, parse config options and return.
+  # idea: http://stackoverflow.com/questions/2683279/how-to-detect-if-a-script-is-being-sourced
+  [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return
 
   # Default action is 'share'; execute the action
   ots_${ACTION:-share} "${FORM[@]}" "${ARGS[@]}" "$@"
