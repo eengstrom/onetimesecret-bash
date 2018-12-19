@@ -97,7 +97,7 @@ ots_set_host()   { _OTS_URI="$1"; }
 ots_set_user()   { _OTS_UID="$1"; }
 ots_set_key()    { _OTS_KEY="$1"; }
 ots_set_format() { _OTS_FMT="$1"; }
-ots_set_config() { echo "$1"; _OTS_CFG="$1"; }
+ots_set_config() { _OTS_CFG="$1"; }
 
 # check on status of OTS server
 ots_status() {
