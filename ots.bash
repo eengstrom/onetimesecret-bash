@@ -12,17 +12,26 @@
 # See README.md and LICENSE.
 ##
 
-# Check bash version; exit if not sufficient
-if ((${BASH_VERSINFO[0]} < 4)); then
-  echo "ERROR: Bash version >= 4.0 required" 1>&2
-  [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 1 || exit 1
-fi
-
 # Defaults
 _OTS_URI="https://onetimesecret.com"
 _OTS_URN="api/v1"
 _OTS_FMT="fmt"          # "fmt|printf", "yaml", "json" or anything else == raw
 _OTS_CFG="$HOME/.ots"
+
+#-----------------------------------------
+# Check bash version; exit if not sufficient
+if ((${BASH_VERSINFO[0]} < 4)); then
+  echo 'ots: ERROR: Bash version >= 4.0 required.' 1>&2
+  [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 1 || exit 1
+fi
+
+# Check for curl and jq, exit if none
+for cmd in jq curl; do
+  if ! (command -v ${cmd} >/dev/null) ; then
+    printf 'ots: ERROR: command `%s` required.\n' "${cmd}" 1>&2
+    [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 1 || exit 1
+  fi
+done
 
 # ------------------------------------------------------------
 # Internal only functions;
